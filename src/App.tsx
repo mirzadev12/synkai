@@ -8,7 +8,7 @@ import {
 import { useState } from "react";
 import { Canvas } from "./Canvas";
 
-const ROOM_ID = "live-canvas-shared-room";
+const ROOM_ID = "synkai-shared-room";
 const publicApiKey = import.meta.env.VITE_LIVEBLOCKS_PUBLIC_KEY ?? "";
 
 function isConfiguredPublicKey(key: string) {
