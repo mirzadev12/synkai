@@ -40,6 +40,9 @@ export type BoxData = {
   // Connection (from AI block → to AI block)
   fromId?: string;
   toId?: string;
+  // Attribution
+  createdBy?: string;
+  creatorId?: string;
 };
 
 export const AI_WIDTH = 280;
@@ -89,7 +92,7 @@ export function withinRange(
 declare global {
   interface Liveblocks {
     Presence: {
-      // Empty for this prototype — we only sync the canvas, not cursors.
+      name: string;
     };
     Storage: {
       boxes: LiveMap<string, LiveObject<BoxData>>;

@@ -84,7 +84,7 @@ export default function App() {
     <LiveblocksProvider publicApiKey={publicApiKey} throttle={16}>
       <RoomProvider
         id={ROOM_ID}
-        initialPresence={{}}
+        initialPresence={{ name: "" }}
         initialStorage={{ boxes: new LiveMap() }}
       >
         <RoomContents />

@@ -10,8 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@google/generative-ai": "^0.24.1",
     "@liveblocks/client": "^3.24.1",
     "@liveblocks/react": "^3.24.1",
+    "@supabase/supabase-js": "^2.49.8",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

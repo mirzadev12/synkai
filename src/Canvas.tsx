@@ -1,7 +1,6 @@
 import { LiveObject } from "@liveblocks/client";
 import {
   useMutation,
-  useOthers,
   useStorage,
 } from "@liveblocks/react/suspense";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +13,10 @@ import {
 } from "./canvasGeometry";
 import { ComparePanel } from "./ComparePanel";
 import { ConnectionsLayer } from "./ConnectionsLayer";
+import { creatorFromSelf } from "./creatorMeta";
+import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
+import { PresenceBar } from "./PresenceBar";
 import {
   AI_HEIGHT,
   AI_WIDTH,
@@ -38,8 +40,6 @@ type Tool = "select" | "pen" | "eraser";
 
 export function Canvas() {
   const boxes = useStorage((root) => root.boxes);
-  const others = useOthers();
-  const peopleHere = others.length + 1;
 
   const [tool, setTool] = useState<Tool>("select");
   const [penColor, setPenColor] = useState<(typeof PEN_COLORS)[number]>(
@@ -65,7 +65,7 @@ export function Canvas() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const linkFromRef = useRef<string | null>(null);
 
-  const addBox = useMutation(({ storage }) => {
+  const addBox = useMutation(({ storage, self }) => {
     const id = crypto.randomUUID();
     const count = storage.get("boxes").size + 1;
     storage.get("boxes").set(
@@ -74,6 +74,7 @@ export function Canvas() {
         x: 48 + ((count * 24) % 280),
         y: 48 + ((count * 24) % 200),
         text: `Box ${count}`,
+        ...creatorFromSelf(self),
       }),
     );
     return id;
@@ -81,7 +82,7 @@ export function Canvas() {
 
   const addAiBlock = useMutation(
     (
-      { storage },
+      { storage, self },
       opts?: { x?: number; y?: number; model?: AiModel; prompt?: string },
     ) => {
       const id = crypto.randomUUID();
@@ -98,6 +99,7 @@ export function Canvas() {
           output: "",
           answeredBy: "",
           status: "idle",
+          ...creatorFromSelf(self),
         }),
       );
       return id;
@@ -106,9 +108,10 @@ export function Canvas() {
   );
 
   const addCompareBlocks = useMutation(
-    ({ storage }, prompt: string, models: AiModel[]) => {
+    ({ storage, self }, prompt: string, models: AiModel[]) => {
       const baseX = 80;
       const baseY = 80;
+      const creator = creatorFromSelf(self);
       for (let i = 0; i < models.length; i += 1) {
         const id = crypto.randomUUID();
         storage.get("boxes").set(
@@ -123,6 +126,7 @@ export function Canvas() {
             output: "",
             answeredBy: "",
             status: "idle",
+            ...creator,
           }),
         );
       }
@@ -130,7 +134,7 @@ export function Canvas() {
     [],
   );
 
-  const addSticky = useMutation(({ storage }) => {
+  const addSticky = useMutation(({ storage, self }) => {
     const id = crypto.randomUUID();
     const count = storage.get("boxes").size + 1;
     storage.get("boxes").set(
@@ -143,13 +147,14 @@ export function Canvas() {
         width: 180,
         height: 160,
         color: "#fef08a",
+        ...creatorFromSelf(self),
       }),
     );
     return id;
   }, []);
 
   const addShape = useMutation(
-    ({ storage }, shapeType: "rect" | "ellipse") => {
+    ({ storage, self }, shapeType: "rect" | "ellipse") => {
       const id = crypto.randomUUID();
       const count = storage.get("boxes").size + 1;
       storage.get("boxes").set(
@@ -163,6 +168,7 @@ export function Canvas() {
           width: 140,
           height: 100,
           color: "#1c1917",
+          ...creatorFromSelf(self),
         }),
       );
       return id;
@@ -170,7 +176,7 @@ export function Canvas() {
     [],
   );
 
-  const addText = useMutation(({ storage }) => {
+  const addText = useMutation(({ storage, self }) => {
     const id = crypto.randomUUID();
     const count = storage.get("boxes").size + 1;
     storage.get("boxes").set(
@@ -183,12 +189,13 @@ export function Canvas() {
         width: 200,
         height: 80,
         fontSize: 24,
+        ...creatorFromSelf(self),
       }),
     );
     return id;
   }, []);
 
-  const addImageFromSrc = useMutation(({ storage }, src: string) => {
+  const addImageFromSrc = useMutation(({ storage, self }, src: string) => {
     const id = crypto.randomUUID();
     const count = storage.get("boxes").size + 1;
     storage.get("boxes").set(
@@ -201,6 +208,7 @@ export function Canvas() {
         width: 220,
         height: 160,
         src,
+        ...creatorFromSelf(self),
       }),
     );
     return id;
@@ -208,7 +216,7 @@ export function Canvas() {
 
   const startStroke = useMutation(
     (
-      { storage },
+      { storage, self },
       args: { id: string; x: number; y: number; color: string; strokeWidth: number },
     ) => {
       storage.get("boxes").set(
@@ -223,6 +231,7 @@ export function Canvas() {
           points: JSON.stringify([{ x: args.x, y: args.y }]),
           width: Math.max(1, args.x + 1),
           height: Math.max(1, args.y + 1),
+          ...creatorFromSelf(self),
         }),
       );
     },
@@ -701,11 +710,7 @@ export function Canvas() {
       <header className="toolbar">
         <div className="toolbar-left">
           <strong>SYNKAI</strong>
-          <span className="presence">
-            {peopleHere === 1
-              ? "1 person here — open another tab to test live sync"
-              : `${peopleHere} people here`}
-          </span>
+          <PresenceBar />
         </div>
         <div className="toolbar-actions">
           <button type="button" className="add-btn" onClick={() => addBox()}>
@@ -850,6 +855,7 @@ export function Canvas() {
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <StrokeItem box={box} />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
             );
           }
@@ -878,6 +884,7 @@ export function Canvas() {
                   onPropagateOutput={(text) => feedConnectedPrompts(id, text)}
                   buildPrompt={(userPrompt) => buildPromptFor(id, userPrompt)}
                 />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
             );
           }
@@ -902,6 +909,7 @@ export function Canvas() {
                     startResize(event, id, box.width ?? 180, box.height ?? 160)
                   }
                 />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
             );
           }
@@ -922,6 +930,7 @@ export function Canvas() {
                     startResize(event, id, box.width ?? 220, box.height ?? 160)
                   }
                 />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
             );
           }
@@ -942,6 +951,7 @@ export function Canvas() {
                     startResize(event, id, box.width ?? 140, box.height ?? 100)
                   }
                 />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
             );
           }
@@ -966,6 +976,7 @@ export function Canvas() {
                     startResize(event, id, box.width ?? 200, box.height ?? 80)
                   }
                 />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
             );
           }
@@ -981,6 +992,7 @@ export function Canvas() {
               }}
             >
               {box.text}
+              <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
             </div>
           );
         })}

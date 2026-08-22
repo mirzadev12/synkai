@@ -26,3 +26,7 @@ dist-ssr
 *.sw?
 
 .vercel
+backend/node_modules
+backend/.env
+backend/dist
+
