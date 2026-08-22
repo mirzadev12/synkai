@@ -5,10 +5,29 @@ type AiBlockProps = {
   id: string;
   box: BoxData;
   dragging: boolean;
+  selected: boolean;
+  nearbyNoteLabels: string[];
+  onSelect: () => void;
   onDragStart: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onOutputDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onInputUp: (event: React.PointerEvent<HTMLButtonElement>) => void;
+  onPropagateOutput: (output: string) => void;
+  buildPrompt: (userPrompt: string) => string;
 };
 
-export function AiBlock({ id, box, dragging, onDragStart }: AiBlockProps) {
+export function AiBlock({
+  id,
+  box,
+  dragging,
+  selected,
+  nearbyNoteLabels,
+  onSelect,
+  onDragStart,
+  onOutputDown,
+  onInputUp,
+  onPropagateOutput,
+  buildPrompt,
+}: AiBlockProps) {
   const model: AiModel = box.model === "groq" ? "groq" : "gemini";
   const prompt = box.prompt ?? "";
   const output = box.output ?? "";
@@ -29,12 +48,13 @@ export function AiBlock({ id, box, dragging, onDragStart }: AiBlockProps) {
 
   async function onRun() {
     if (running) return;
+    const finalPrompt = buildPrompt(prompt);
     updateAi({ status: "running", output: "", answeredBy: "" });
     try {
       const response = await fetch("/api/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, model }),
+        body: JSON.stringify({ prompt: finalPrompt, model }),
       });
       const payload: unknown = await response.json();
       const record =
@@ -54,6 +74,7 @@ export function AiBlock({ id, box, dragging, onDragStart }: AiBlockProps) {
             ? "Groq"
             : "Gemini";
       updateAi({ output: text, answeredBy: by, status: "idle" });
+      onPropagateOutput(text);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Request failed";
@@ -62,7 +83,26 @@ export function AiBlock({ id, box, dragging, onDragStart }: AiBlockProps) {
   }
 
   return (
-    <div className={`box ai-block${dragging ? " box-dragging" : ""}`}>
+    <div
+      className={`box ai-block${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
+      onPointerDown={() => onSelect()}
+    >
+      <button
+        type="button"
+        className="port port-in"
+        title="Input"
+        aria-label="Input connector"
+        onPointerUp={onInputUp}
+        onPointerDown={(event) => event.stopPropagation()}
+      />
+      <button
+        type="button"
+        className="port port-out"
+        title="Output — drag to another AI Block"
+        aria-label="Output connector"
+        onPointerDown={onOutputDown}
+      />
+
       <div className="ai-block-handle" onPointerDown={onDragStart}>
         AI Block
       </div>
@@ -83,6 +123,11 @@ export function AiBlock({ id, box, dragging, onDragStart }: AiBlockProps) {
         value={prompt}
         onChange={(event) => updateAi({ prompt: event.target.value })}
       />
+      {nearbyNoteLabels.length > 0 ? (
+        <div className="ai-context-hint">
+          Nearby context: {nearbyNoteLabels.join(", ")}
+        </div>
+      ) : null}
       <button
         type="button"
         className="ai-run"

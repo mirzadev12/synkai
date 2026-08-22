@@ -281,6 +281,7 @@ body {
 .ai-block {
   width: 280px;
   height: 260px;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -345,6 +346,183 @@ body {
 .ai-answered {
   font-size: 11px;
   color: #78716c;
+}
+
+.ai-context-hint {
+  font-size: 11px;
+  color: #57534e;
+  background: #f5f5f4;
+  border-radius: 4px;
+  padding: 4px 6px;
+}
+
+.port {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  background: #2563eb;
+  padding: 0;
+  cursor: crosshair;
+  z-index: 3;
+  box-shadow: 0 0 0 1px #1d4ed8;
+}
+
+.port-in {
+  left: -7px;
+}
+
+.port-out {
+  right: -7px;
+}
+
+.connections-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 0;
+}
+
+.connection-line {
+  fill: none;
+  stroke: #57534e;
+  stroke-width: 2.5;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connection-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connection.selected .connection-line {
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
+.connection-draft {
+  stroke: #2563eb;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.connection-delete {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.connection-delete circle {
+  fill: #dc2626;
+}
+
+.connection-delete text {
+  fill: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.item-selected {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.note-in-range .canvas-item {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
+.trash-bin {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: 56px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 12px;
+  border: 1px dashed #a8a29e;
+  background: rgba(255, 255, 255, 0.92);
+  color: #78716c;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.trash-bin.trash-hot {
+  border-color: #dc2626;
+  background: #fee2e2;
+  color: #b91c1c;
+  transform: scale(1.06);
+}
+
+.trash-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.trash-label {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.compare-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 25, 23, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.compare-panel {
+  width: min(420px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+}
+
+.compare-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.compare-copy {
+  margin: 0;
+  font-size: 13px;
+  color: #78716c;
+}
+
+.compare-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.compare-soon {
+  color: #a8a29e;
+}
+
+.canvas-eraser {
+  cursor: cell;
 }
 
 .setup,
