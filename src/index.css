@@ -1,0 +1,210 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  color: #1c1917;
+  background: #f5f5f4;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e7e5e4;
+  background: #fff;
+}
+
+.toolbar-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.presence {
+  font-size: 13px;
+  color: #78716c;
+}
+
+.add-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  background: #1c1917;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.add-btn:hover {
+  background: #44403c;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.item-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.canvas {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, #e7e5e4 1px, transparent 1px),
+    linear-gradient(#e7e5e4 1px, transparent 1px);
+  background-size: 24px 24px;
+  background-color: #fafaf9;
+  touch-action: none;
+}
+
+.box {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 160px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d6d3d1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  cursor: grab;
+  user-select: none;
+  font-size: 15px;
+}
+
+.box-dragging {
+  cursor: grabbing;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  z-index: 2;
+}
+
+.ai-block {
+  width: 280px;
+  height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 8px;
+  cursor: default;
+  user-select: auto;
+}
+
+.ai-block-handle {
+  cursor: grab;
+  font-size: 13px;
+  font-weight: 600;
+  user-select: none;
+}
+
+.ai-block.box-dragging .ai-block-handle {
+  cursor: grabbing;
+}
+
+.ai-model,
+.ai-prompt,
+.ai-run {
+  font: inherit;
+  font-size: 13px;
+}
+
+.ai-prompt,
+.ai-model {
+  border: 1px solid #d6d3d1;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.ai-run {
+  appearance: none;
+  border: 0;
+  border-radius: 6px;
+  background: #1c1917;
+  color: #fff;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.ai-run:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ai-output {
+  flex: 1;
+  overflow: auto;
+  border: 1px solid #e7e5e4;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  background: #fafaf9;
+}
+
+.ai-answered {
+  font-size: 11px;
+  color: #78716c;
+}
+
+.setup,
+.loading {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 48px 24px;
+  line-height: 1.5;
+}
+
+.setup h1 {
+  margin-top: 0;
+}
+
+.setup ol {
+  padding-left: 1.25rem;
+}
+
+.setup pre,
+.setup code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.setup pre {
+  background: #1c1917;
+  color: #fafaf9;
+  padding: 12px 14px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.loading {
+  text-align: center;
+  color: #78716c;
+}
