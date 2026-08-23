@@ -19,5 +19,10 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "server/runAi.ts", "api/**/*.ts", "backend/src/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "server/runAi.ts",
+    "api/**/*.ts",
+    "backend/src/lib/**/*.ts"
+  ]
 }
