@@ -28,6 +28,7 @@ import {
 import { ShapeItem } from "./ShapeItem";
 import { StickyNote } from "./StickyNote";
 import { StrokeItem } from "./StrokeItem";
+import { TeamMemoryPanel } from "./TeamMemoryPanel";
 import { TextItem } from "./TextItem";
 import "./liveblocks.config";
 
@@ -57,6 +58,8 @@ export function Canvas() {
   const [linkCursor, setLinkCursor] = useState<Point | null>(null);
   const [overTrash, setOverTrash] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
 
   const dragOffset = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
@@ -726,6 +729,13 @@ export function Canvas() {
           >
             Compare
           </button>
+          <button
+            type="button"
+            className={`add-btn${memoryOpen ? " add-btn-active" : ""}`}
+            onClick={() => setMemoryOpen((open) => !open)}
+          >
+            Team Memory
+          </button>
           <button type="button" className="add-btn" onClick={() => addSticky()}>
             Sticky
           </button>
@@ -824,6 +834,12 @@ export function Canvas() {
         onCreate={(prompt, models) => addCompareBlocks(prompt, models)}
       />
 
+      <TeamMemoryPanel
+        open={memoryOpen}
+        onClose={() => setMemoryOpen(false)}
+        refreshKey={memoryRefreshKey}
+      />
+
       <div
         ref={canvasRef}
         className={`canvas${tool === "pen" || tool === "eraser" ? " canvas-pen" : ""}${tool === "eraser" ? " canvas-eraser" : ""}`}
@@ -883,6 +899,9 @@ export function Canvas() {
                   onInputUp={(event) => onInputUp(event, id)}
                   onPropagateOutput={(text) => feedConnectedPrompts(id, text)}
                   buildPrompt={(userPrompt) => buildPromptFor(id, userPrompt)}
+                  onMemoryLogged={() =>
+                    setMemoryRefreshKey((key) => key + 1)
+                  }
                 />
                 <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>
