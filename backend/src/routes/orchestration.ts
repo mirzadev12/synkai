@@ -110,7 +110,7 @@ router.post("/orchestrate", async (req, res) => {
 
 /**
  * GET /api/memory/:workspaceId
- * Lightweight team-memory summary for the UI.
+ * Recent team-memory events (+ formatted context string).
  */
 router.get("/memory/:workspaceId", async (req, res) => {
   try {
@@ -119,8 +119,56 @@ router.get("/memory/:workspaceId", async (req, res) => {
       res.status(400).json({ error: "workspaceId required" });
       return;
     }
-    const summary = await memoryService.getWorkspaceMemorySummary(workspaceId);
-    res.json(summary);
+    const limit = Math.min(
+      50,
+      Math.max(1, Number.parseInt(String(req.query.limit ?? "15"), 10) || 15),
+    );
+    const events = await memoryService.getWorkspaceMemory(workspaceId, limit);
+    res.json({
+      events,
+      formatted: memoryService.formatMemoryAsContext(events),
+      count: events.length,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Request failed";
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * POST /api/memory/:workspaceId
+ * Log a canvas / AI Block memory event.
+ */
+router.post("/memory/:workspaceId", async (req, res) => {
+  try {
+    const workspaceId = req.params.workspaceId;
+    if (!workspaceId) {
+      res.status(400).json({ error: "workspaceId required" });
+      return;
+    }
+    const body = req.body ?? {};
+    const content = typeof body.content === "string" ? body.content : "";
+    if (!content.trim()) {
+      res.status(400).json({ error: "content required" });
+      return;
+    }
+    const eventType =
+      typeof body.eventType === "string" && body.eventType.trim()
+        ? body.eventType
+        : "ai_output";
+    const blockId = typeof body.blockId === "string" ? body.blockId : null;
+    const modelProvider =
+      typeof body.modelProvider === "string" ? body.modelProvider : null;
+    const prompt = typeof body.prompt === "string" ? body.prompt : null;
+    const id = await memoryService.logMemoryEvent(
+      workspaceId,
+      blockId,
+      eventType,
+      modelProvider,
+      prompt,
+      content,
+    );
+    res.status(201).json({ id });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Request failed";
     res.status(500).json({ error: message });

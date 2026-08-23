@@ -24,10 +24,40 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+function applyServerEnv(env: Record<string, string>) {
+  for (const key of [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_ANON_KEY",
+    "DEMO_WORKSPACE_ID",
+    "GEMINI_API_KEY",
+    "GROQ_API_KEY",
+  ]) {
+    if (env[key] && !process.env[key]) {
+      process.env[key] = env[key];
+    }
+  }
+}
+
+function parseMemoryPath(url: string): { workspaceId: string; limit: number } | null {
+  const match = /^\/api\/memory\/([^/?]+)\/?(?:\?(.*))?$/.exec(url);
+  if (!match) return null;
+  const workspaceId = decodeURIComponent(match[1] ?? "");
+  if (!workspaceId) return null;
+  const params = new URLSearchParams(match[2] ?? "");
+  const limit = Math.min(
+    50,
+    Math.max(1, Number.parseInt(params.get("limit") ?? "15", 10) || 15),
+  );
+  return { workspaceId, limit };
+}
+
 function aiApiPlugin(env: Record<string, string>): Plugin {
   return {
     name: "ai-api",
     configureServer(server) {
+      applyServerEnv(env);
+
       server.middlewares.use("/api/run", (req, res, next) => {
         void (async () => {
           if (req.method !== "POST") {
@@ -57,12 +87,85 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
           }
         })().catch(next);
       });
+
+      server.middlewares.use((req, res, next) => {
+        const url = req.url ?? "";
+        if (!url.startsWith("/api/memory/")) {
+          next();
+          return;
+        }
+
+        void (async () => {
+          const parsed = parseMemoryPath(url.split("#")[0] ?? url);
+          if (!parsed) {
+            sendJson(res, 400, { error: "workspaceId required" });
+            return;
+          }
+
+          const memoryService = await import(
+            "./backend/src/lib/memoryService.ts"
+          );
+
+          if (req.method === "GET") {
+            const events = await memoryService.getWorkspaceMemory(
+              parsed.workspaceId,
+              parsed.limit,
+            );
+            sendJson(res, 200, {
+              events,
+              formatted: memoryService.formatMemoryAsContext(events),
+              count: events.length,
+            });
+            return;
+          }
+
+          if (req.method === "POST") {
+            const body = await readJsonBody(req);
+            const record =
+              body && typeof body === "object" && !Array.isArray(body)
+                ? (body as Record<string, unknown>)
+                : {};
+            const content =
+              typeof record.content === "string" ? record.content : "";
+            if (!content.trim()) {
+              sendJson(res, 400, { error: "content required" });
+              return;
+            }
+            const eventType =
+              typeof record.eventType === "string" && record.eventType.trim()
+                ? record.eventType
+                : "ai_output";
+            const blockId =
+              typeof record.blockId === "string" ? record.blockId : null;
+            const modelProvider =
+              typeof record.modelProvider === "string"
+                ? record.modelProvider
+                : null;
+            const prompt =
+              typeof record.prompt === "string" ? record.prompt : null;
+            const id = await memoryService.logMemoryEvent(
+              parsed.workspaceId,
+              blockId,
+              eventType,
+              modelProvider,
+              prompt,
+              content,
+            );
+            sendJson(res, 201, { id });
+            return;
+          }
+
+          sendJson(res, 405, { error: "Method not allowed" });
+        })().catch(next);
+      });
     },
   };
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
+  const rootEnv = loadEnv(mode, process.cwd(), "");
+  const backendEnv = loadEnv(mode, `${process.cwd()}/backend`, "");
+  const env = { ...backendEnv, ...rootEnv };
   return {
     plugins: [react(), aiApiPlugin(env)],
   };
