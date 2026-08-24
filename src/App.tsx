@@ -24,6 +24,7 @@ function isConfiguredPublicKey(key: string) {
 function SetupScreen({ message }: { message?: string }) {
   return (
     <div className="setup">
+      <p className="brand-wordmark setup-brand">SYNKAI</p>
       <h1>{message ? "Could not connect" : "One more step"}</h1>
       {message ? <p>{message}</p> : null}
       <p>

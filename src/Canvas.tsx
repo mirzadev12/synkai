@@ -5,6 +5,10 @@ import {
 } from "@liveblocks/react/suspense";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AiBlock } from "./AiBlock";
+import { ConditionBlock } from "./ConditionBlock";
+import { OutputBlock } from "./OutputBlock";
+import { TransformBlock } from "./TransformBlock";
+import { TriggerBlock } from "./TriggerBlock";
 import {
   boundsOfPoints,
   eraseNearPoints,
@@ -24,12 +28,21 @@ import {
   getItemSize,
   withinRange,
   type AiModel,
+  type ConnectionBranch,
+  type ItemKind,
 } from "./liveblocks.config";
 import { ShapeItem } from "./ShapeItem";
 import { StickyNote } from "./StickyNote";
 import { StrokeItem } from "./StrokeItem";
 import { TeamMemoryPanel } from "./TeamMemoryPanel";
 import { TextItem } from "./TextItem";
+import { WorkflowTracePanel } from "./WorkflowTracePanel";
+import { extractConnectedWorkflow } from "./workflowGraph";
+import {
+  runSavedWorkflow,
+  saveWorkflowGraph,
+  type WorkflowRunResult,
+} from "./workflowApi";
 import "./liveblocks.config";
 
 const PEN_COLORS = ["#1c1917", "#dc2626", "#2563eb"] as const;
@@ -55,11 +68,17 @@ export function Canvas() {
     null,
   );
   const [linkFromId, setLinkFromId] = useState<string | null>(null);
+  const [linkBranch, setLinkBranch] = useState<ConnectionBranch>("default");
   const [linkCursor, setLinkCursor] = useState<Point | null>(null);
   const [overTrash, setOverTrash] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
+  const [traceOpen, setTraceOpen] = useState(false);
+  const [traceResult, setTraceResult] = useState<WorkflowRunResult | null>(null);
+  const [traceError, setTraceError] = useState<string | null>(null);
+  const [workflowRunning, setWorkflowRunning] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
 
   const dragOffset = useRef({ x: 0, y: 0 });
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
@@ -67,6 +86,7 @@ export function Canvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const linkFromRef = useRef<string | null>(null);
+  const linkBranchRef = useRef<ConnectionBranch>("default");
 
   const addBox = useMutation(({ storage, self }) => {
     const id = crypto.randomUUID();
@@ -105,6 +125,74 @@ export function Canvas() {
           ...creatorFromSelf(self),
         }),
       );
+      return id;
+    },
+    [],
+  );
+
+  const addWorkflowNode = useMutation(
+    (
+      { storage, self },
+      kind: Extract<ItemKind, "trigger" | "condition" | "transform" | "output">,
+    ) => {
+      const id = crypto.randomUUID();
+      const count = storage.get("boxes").size + 1;
+      const creator = creatorFromSelf(self);
+      const base = {
+        x: 64 + ((count * 24) % 240),
+        y: 64 + ((count * 24) % 160),
+        output: "",
+        status: "idle" as const,
+        ...creator,
+      };
+      if (kind === "trigger") {
+        storage.get("boxes").set(
+          id,
+          new LiveObject({
+            ...base,
+            text: "Trigger",
+            kind: "trigger",
+            triggerMode: "manual",
+            triggerInput: "",
+            memoryFilter: "brief",
+          }),
+        );
+      } else if (kind === "condition") {
+        storage.get("boxes").set(
+          id,
+          new LiveObject({
+            ...base,
+            text: "Condition",
+            kind: "condition",
+            conditionField: "output",
+            conditionRule: "contains",
+            conditionValue: "urgent",
+          }),
+        );
+      } else if (kind === "transform") {
+        storage.get("boxes").set(
+          id,
+          new LiveObject({
+            ...base,
+            text: "Transform",
+            kind: "transform",
+            transformOp: "uppercase",
+            transformN: 8,
+            transformTemplate: "Summary: {{input}}",
+          }),
+        );
+      } else {
+        storage.get("boxes").set(
+          id,
+          new LiveObject({
+            ...base,
+            text: "Output",
+            kind: "output",
+            outputMode: "log_to_memory",
+            webhookUrl: "",
+          }),
+        );
+      }
       return id;
     },
     [],
@@ -290,14 +378,21 @@ export function Canvas() {
   );
 
   const addConnection = useMutation(
-    ({ storage }, fromId: string, toId: string) => {
+    (
+      { storage },
+      fromId: string,
+      toId: string,
+      branch: ConnectionBranch = "default",
+    ) => {
       if (fromId === toId) return;
       const map = storage.get("boxes");
       for (const [, live] of map) {
+        const existingBranch = live.get("branch") ?? "default";
         if (
           live.get("kind") === "connection" &&
           live.get("fromId") === fromId &&
-          live.get("toId") === toId
+          live.get("toId") === toId &&
+          existingBranch === branch
         ) {
           return;
         }
@@ -312,6 +407,7 @@ export function Canvas() {
           kind: "connection",
           fromId,
           toId,
+          branch,
         }),
       );
     },
@@ -352,6 +448,23 @@ export function Canvas() {
         const existing = (target.get("prompt") ?? "").trim();
         const next = existing ? `${output}\n\n---\n\n${existing}` : output;
         target.update({ prompt: next });
+      }
+    },
+    [],
+  );
+
+  const applyRunOutputs = useMutation(
+    (
+      { storage },
+      steps: { canvasId: string | null; output: string; status: string }[],
+    ) => {
+      const map = storage.get("boxes");
+      for (const step of steps) {
+        if (!step.canvasId) continue;
+        map.get(step.canvasId)?.update({
+          output: step.output,
+          status: step.status === "failed" ? "error" : "idle",
+        });
       }
     },
     [],
@@ -500,6 +613,8 @@ export function Canvas() {
       linkFromRef.current = null;
       setLinkFromId(null);
       setLinkCursor(null);
+      linkBranchRef.current = "default";
+      setLinkBranch("default");
     }
 
     window.addEventListener("pointermove", onMove);
@@ -673,10 +788,13 @@ export function Canvas() {
   function onOutputDown(
     event: React.PointerEvent<HTMLButtonElement>,
     id: string,
+    branch: ConnectionBranch = "default",
   ) {
     event.preventDefault();
     event.stopPropagation();
     linkFromRef.current = id;
+    linkBranchRef.current = branch;
+    setLinkBranch(branch);
     setLinkFromId(id);
     const point = canvasPoint(event);
     if (point) setLinkCursor(point);
@@ -689,12 +807,63 @@ export function Canvas() {
     event.preventDefault();
     event.stopPropagation();
     const fromId = linkFromRef.current;
+    const branch = linkBranchRef.current;
     if (fromId && fromId !== toId) {
-      addConnection(fromId, toId);
+      addConnection(fromId, toId, branch);
     }
     linkFromRef.current = null;
+    linkBranchRef.current = "default";
     setLinkFromId(null);
     setLinkCursor(null);
+  }
+
+  async function persistWorkflow(name: string): Promise<string> {
+    const graph = extractConnectedWorkflow(boxes);
+    if (graph.nodes.length === 0) {
+      throw new Error("Add a Trigger and connect nodes first");
+    }
+    const id = await saveWorkflowGraph({
+      name,
+      nodes: graph.nodes,
+      edges: graph.edges,
+    });
+    return id;
+  }
+
+  async function onSaveWorkflow() {
+    if (saveBusy) return;
+    const name = window.prompt("Workflow name", "Canvas workflow");
+    if (!name?.trim()) return;
+    setSaveBusy(true);
+    setTraceError(null);
+    try {
+      await persistWorkflow(name.trim());
+      setTraceOpen(true);
+    } catch (error) {
+      setTraceOpen(true);
+      setTraceError(error instanceof Error ? error.message : "Save failed");
+    } finally {
+      setSaveBusy(false);
+    }
+  }
+
+  async function onRunWorkflow(triggerCanvasId: string) {
+    if (workflowRunning) return;
+    setWorkflowRunning(true);
+    setTraceOpen(true);
+    setTraceError(null);
+    try {
+      const workflowId = await persistWorkflow("Canvas workflow");
+      const triggerInput = boxes[triggerCanvasId]?.triggerInput ?? "";
+      const result = await runSavedWorkflow(workflowId, triggerInput);
+      setTraceResult(result);
+      applyRunOutputs(result.steps);
+      setMemoryRefreshKey((key) => key + 1);
+    } catch (error) {
+      setTraceError(error instanceof Error ? error.message : "Run failed");
+    } finally {
+      setWorkflowRunning(false);
+    }
   }
 
   function buildPromptFor(aiId: string, userPrompt: string): string {
@@ -712,7 +881,7 @@ export function Canvas() {
     <div className="app">
       <header className="toolbar">
         <div className="toolbar-left">
-          <strong>SYNKAI</strong>
+          <strong className="brand-wordmark">SYNKAI</strong>
           <PresenceBar />
         </div>
         <div className="toolbar-actions">
@@ -721,6 +890,42 @@ export function Canvas() {
           </button>
           <button type="button" className="add-btn" onClick={() => addAiBlock()}>
             AI Block
+          </button>
+          <button
+            type="button"
+            className="add-btn"
+            onClick={() => addWorkflowNode("trigger")}
+          >
+            Trigger
+          </button>
+          <button
+            type="button"
+            className="add-btn"
+            onClick={() => addWorkflowNode("condition")}
+          >
+            Condition
+          </button>
+          <button
+            type="button"
+            className="add-btn"
+            onClick={() => addWorkflowNode("transform")}
+          >
+            Transform
+          </button>
+          <button
+            type="button"
+            className="add-btn"
+            onClick={() => addWorkflowNode("output")}
+          >
+            Output
+          </button>
+          <button
+            type="button"
+            className="add-btn"
+            onClick={() => void onSaveWorkflow()}
+            disabled={saveBusy}
+          >
+            {saveBusy ? "Saving…" : "Save as Workflow"}
           </button>
           <button
             type="button"
@@ -735,6 +940,13 @@ export function Canvas() {
             onClick={() => setMemoryOpen((open) => !open)}
           >
             Team Memory
+          </button>
+          <button
+            type="button"
+            className={`add-btn${traceOpen ? " add-btn-active" : ""}`}
+            onClick={() => setTraceOpen((open) => !open)}
+          >
+            Run Trace
           </button>
           <button type="button" className="add-btn" onClick={() => addSticky()}>
             Sticky
@@ -840,6 +1052,14 @@ export function Canvas() {
         refreshKey={memoryRefreshKey}
       />
 
+      <WorkflowTracePanel
+        open={traceOpen}
+        onClose={() => setTraceOpen(false)}
+        result={traceResult}
+        error={traceError}
+        running={workflowRunning}
+      />
+
       <div
         ref={canvasRef}
         className={`canvas${tool === "pen" || tool === "eraser" ? " canvas-pen" : ""}${tool === "eraser" ? " canvas-eraser" : ""}`}
@@ -849,6 +1069,7 @@ export function Canvas() {
           boxes={boxes}
           selectedConnectionId={selectedConnectionId}
           draftFromId={linkFromId}
+          draftBranch={linkBranch}
           draftTo={linkCursor}
           onSelectConnection={(id) => {
             setSelectedConnectionId(id);
@@ -902,6 +1123,107 @@ export function Canvas() {
                   onMemoryLogged={() =>
                     setMemoryRefreshKey((key) => key + 1)
                   }
+                />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
+              </div>
+            );
+          }
+
+          if (box.kind === "trigger") {
+            return (
+              <div
+                key={id}
+                className="item-wrap"
+                style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+              >
+                <TriggerBlock
+                  id={id}
+                  box={box}
+                  dragging={draggingId === id}
+                  selected={selectedId === id}
+                  running={workflowRunning}
+                  onSelect={() => {
+                    setSelectedId(id);
+                    setSelectedConnectionId(null);
+                  }}
+                  onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                  onOutputDown={(event) => onOutputDown(event, id)}
+                  onRunWorkflow={() => void onRunWorkflow(id)}
+                />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
+              </div>
+            );
+          }
+
+          if (box.kind === "condition") {
+            return (
+              <div
+                key={id}
+                className="item-wrap"
+                style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+              >
+                <ConditionBlock
+                  id={id}
+                  box={box}
+                  dragging={draggingId === id}
+                  selected={selectedId === id}
+                  onSelect={() => {
+                    setSelectedId(id);
+                    setSelectedConnectionId(null);
+                  }}
+                  onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                  onInputUp={(event) => onInputUp(event, id)}
+                  onTrueDown={(event) => onOutputDown(event, id, "true")}
+                  onFalseDown={(event) => onOutputDown(event, id, "false")}
+                />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
+              </div>
+            );
+          }
+
+          if (box.kind === "transform") {
+            return (
+              <div
+                key={id}
+                className="item-wrap"
+                style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+              >
+                <TransformBlock
+                  id={id}
+                  box={box}
+                  dragging={draggingId === id}
+                  selected={selectedId === id}
+                  onSelect={() => {
+                    setSelectedId(id);
+                    setSelectedConnectionId(null);
+                  }}
+                  onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                  onOutputDown={(event) => onOutputDown(event, id)}
+                  onInputUp={(event) => onInputUp(event, id)}
+                />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
+              </div>
+            );
+          }
+
+          if (box.kind === "output") {
+            return (
+              <div
+                key={id}
+                className="item-wrap"
+                style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+              >
+                <OutputBlock
+                  id={id}
+                  box={box}
+                  dragging={draggingId === id}
+                  selected={selectedId === id}
+                  onSelect={() => {
+                    setSelectedId(id);
+                    setSelectedConnectionId(null);
+                  }}
+                  onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                  onInputUp={(event) => onInputUp(event, id)}
                 />
                 <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
               </div>

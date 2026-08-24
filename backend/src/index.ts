@@ -4,6 +4,7 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import orchestrationRoutes from "./routes/orchestration.js";
+import workflowRoutes from "./routes/workflows.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,6 +23,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", orchestrationRoutes);
+app.use("/api", workflowRoutes);
 
 app.listen(port, () => {
   console.log(`SYNKAI orchestration API listening on http://localhost:${port}`);

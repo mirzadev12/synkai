@@ -158,6 +158,31 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
           sendJson(res, 405, { error: "Method not allowed" });
         })().catch(next);
       });
+
+      server.middlewares.use((req, res, next) => {
+        const url = req.url ?? "";
+        if (!url.startsWith("/api/workflows")) {
+          next();
+          return;
+        }
+
+        void (async () => {
+          const { dispatchWorkflowApi } = await import(
+            "./backend/src/lib/workflowHttp.ts"
+          );
+          const pathname = (url.split("#")[0] ?? url).split("?")[0] ?? url;
+          const body =
+            req.method === "GET" || req.method === "HEAD"
+              ? {}
+              : await readJsonBody(req);
+          const result = await dispatchWorkflowApi(
+            req.method ?? "GET",
+            pathname,
+            body,
+          );
+          sendJson(res, result.status, result.json);
+        })().catch(next);
+      });
     },
   };
 }

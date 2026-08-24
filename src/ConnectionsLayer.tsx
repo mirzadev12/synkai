@@ -1,10 +1,18 @@
 import type { BoxData } from "./liveblocks.config";
-import { aiInputPort, aiOutputPort, curvedPath, type Point } from "./canvasGeometry";
+import {
+  curvedPath,
+  isConnectableKind,
+  itemInputPort,
+  itemOutputPort,
+  type Point,
+} from "./canvasGeometry";
+import type { ConnectionBranch } from "./liveblocks.config";
 
 type ConnectionsLayerProps = {
   boxes: Record<string, BoxData>;
   selectedConnectionId: string | null;
   draftFromId: string | null;
+  draftBranch: ConnectionBranch;
   draftTo: Point | null;
   onSelectConnection: (id: string) => void;
   onDeleteConnection: (id: string) => void;
@@ -14,6 +22,7 @@ export function ConnectionsLayer({
   boxes,
   selectedConnectionId,
   draftFromId,
+  draftBranch,
   draftTo,
   onSelectConnection,
   onDeleteConnection,
@@ -22,19 +31,31 @@ export function ConnectionsLayer({
     ([, box]) => box.kind === "connection" && box.fromId && box.toId,
   );
 
+  const draftFromBox = draftFromId ? boxes[draftFromId] : undefined;
   const draftFrom =
-    draftFromId && boxes[draftFromId] ? aiOutputPort(boxes[draftFromId]) : null;
+    draftFromBox && isConnectableKind(draftFromBox.kind)
+      ? itemOutputPort(draftFromBox, draftBranch)
+      : null;
 
   return (
     <svg className="connections-layer" aria-hidden>
       {connections.map(([id, conn]) => {
         const fromBox = conn.fromId ? boxes[conn.fromId] : undefined;
         const toBox = conn.toId ? boxes[conn.toId] : undefined;
-        if (!fromBox || !toBox || fromBox.kind !== "ai" || toBox.kind !== "ai") {
+        if (
+          !fromBox ||
+          !toBox ||
+          !isConnectableKind(fromBox.kind) ||
+          !isConnectableKind(toBox.kind)
+        ) {
           return null;
         }
-        const from = aiOutputPort(fromBox);
-        const to = aiInputPort(toBox);
+        const branch: ConnectionBranch =
+          conn.branch === "true" || conn.branch === "false"
+            ? conn.branch
+            : "default";
+        const from = itemOutputPort(fromBox, branch);
+        const to = itemInputPort(toBox);
         const selected = selectedConnectionId === id;
         const midX = (from.x + to.x) / 2;
         const midY = (from.y + to.y) / 2;

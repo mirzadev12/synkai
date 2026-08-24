@@ -1,14 +1,41 @@
-import type { BoxData } from "./liveblocks.config";
-import { AI_HEIGHT, AI_WIDTH } from "./liveblocks.config";
+import type { BoxData, ConnectionBranch } from "./liveblocks.config";
+import { getItemSize } from "./liveblocks.config";
 
 export type Point = { x: number; y: number };
 
+export function isConnectableKind(kind?: string): boolean {
+  return (
+    kind === "ai" ||
+    kind === "trigger" ||
+    kind === "condition" ||
+    kind === "transform" ||
+    kind === "output"
+  );
+}
+
+export function itemInputPort(box: BoxData): Point {
+  const { height } = getItemSize(box);
+  return { x: box.x, y: box.y + height / 2 };
+}
+
+export function itemOutputPort(
+  box: BoxData,
+  branch: ConnectionBranch = "default",
+): Point {
+  const { width, height } = getItemSize(box);
+  if (box.kind === "condition") {
+    const ratio = branch === "false" ? 0.68 : 0.32;
+    return { x: box.x + width, y: box.y + height * ratio };
+  }
+  return { x: box.x + width, y: box.y + height / 2 };
+}
+
 export function aiOutputPort(box: BoxData): Point {
-  return { x: box.x + AI_WIDTH, y: box.y + AI_HEIGHT / 2 };
+  return itemOutputPort(box, "default");
 }
 
 export function aiInputPort(box: BoxData): Point {
-  return { x: box.x, y: box.y + AI_HEIGHT / 2 };
+  return itemInputPort(box);
 }
 
 export function curvedPath(from: Point, to: Point): string {

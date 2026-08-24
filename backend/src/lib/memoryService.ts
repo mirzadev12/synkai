@@ -167,6 +167,7 @@ export async function logMemoryEvent(
   modelProvider: string | null,
   prompt: string | null,
   content: string,
+  options?: { skipWorkflowTrigger?: boolean },
 ): Promise<string> {
   const metaPayload = JSON.stringify({
     block_id: blockId,
@@ -209,7 +210,21 @@ export async function logMemoryEvent(
     );
   }
 
-  return result.data.id as string;
+  const eventId = result.data.id as string;
+  if (!options?.skipWorkflowTrigger) {
+    void import("./workflowEngine.js")
+      .then((engine) =>
+        engine.triggerWorkflowsForMemoryEvent(
+          workspaceId,
+          eventType,
+          content,
+        ),
+      )
+      .catch(() => {
+        // Auto-run is best-effort.
+      });
+  }
+  return eventId;
 }
 
 /**
