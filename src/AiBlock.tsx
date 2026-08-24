@@ -111,6 +111,7 @@ export function AiBlock({
   const running = box.status === "running";
   const [memoryCount, setMemoryCount] = useState(0);
   const [comingSoon, setComingSoon] = useState<string | null>(null);
+  const [modelSelectKey, setModelSelectKey] = useState(0);
 
   const updateAi = useMutation(
     (
@@ -225,6 +226,7 @@ export function AiBlock({
           </span>
         </div>
         <select
+          key={`${model}-${modelSelectKey}`}
           className="ai-model"
           value={model}
           aria-label="Model"
@@ -233,8 +235,12 @@ export function AiBlock({
             const value = event.target.value;
             if (value === "claude" || value === "midjourney") {
               setComingSoon(value === "claude" ? "Claude" : "Midjourney");
+              // Remount so the controlled value stays Gemini/Groq.
+              // Leaving the native select on "claude" crashes when switching back.
+              setModelSelectKey((key) => key + 1);
               return;
             }
+            setComingSoon(null);
             updateAi({ model: value as AiModel });
           }}
         >
@@ -332,7 +338,10 @@ export function AiBlock({
           <button
             type="button"
             className="ai-run"
-            onClick={() => setComingSoon(null)}
+            onClick={() => {
+              setComingSoon(null);
+              setModelSelectKey((key) => key + 1);
+            }}
           >
             OK
           </button>
