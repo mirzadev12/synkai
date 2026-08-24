@@ -688,6 +688,8 @@ body {
 .ai-block {
   width: 300px;
   height: 340px;
+  min-width: 260px;
+  min-height: 280px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -696,38 +698,81 @@ body {
   gap: 0;
   padding: 0;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 16px;
   cursor: default;
   user-select: auto;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.ai-block .resize-handle {
+  z-index: 5;
 }
 
 .ai-chat-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
-  padding: 6px 8px 6px 10px;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px 8px 8px 10px;
   cursor: grab;
   user-select: none;
   background: var(--surface-container-high);
   border-bottom: 1px solid var(--outline-variant);
 }
 
+.ai-agent-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--primary-container);
+  color: var(--on-maroon);
+}
+
+.ai-agent-avatar .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.ai-agent-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 0 1 auto;
+  line-height: 1.15;
+}
+
+.ai-agent-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.ai-agent-status {
+  font-size: 11px;
+  color: var(--on-surface-variant);
+}
+
+.ai-agent-status.is-busy {
+  color: var(--primary);
+}
+
 .ai-block.box-dragging .ai-chat-header {
   cursor: grabbing;
 }
 
-.ai-chat-logo {
-  font-size: 18px;
-  color: var(--primary);
-}
-
 .ai-chat-header .ai-model {
   flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  padding: 4px 2px;
+  min-width: 72px;
+  max-width: 120px;
+  margin-left: auto;
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .ai-chat-close {
@@ -814,13 +859,14 @@ body {
   flex: 1;
   min-width: 0;
   border: 1px solid var(--outline-variant);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 999px;
+  padding: 8px 12px;
 }
 
 .ai-chat-composer .ai-run {
   flex: 0 0 auto;
-  padding: 8px 12px;
+  padding: 8px 14px;
+  border-radius: 999px;
 }
 
 .coming-soon-pop {

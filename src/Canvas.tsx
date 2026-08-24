@@ -125,6 +125,8 @@ export function Canvas() {
           output: "",
           answeredBy: "",
           status: "idle",
+          width: AI_WIDTH,
+          height: AI_HEIGHT,
           ...creatorFromSelf(self),
         }),
       );
@@ -220,6 +222,8 @@ export function Canvas() {
             output: "",
             answeredBy: "",
             status: "idle",
+            width: AI_WIDTH,
+            height: AI_HEIGHT,
             ...creator,
           }),
         );
@@ -550,10 +554,11 @@ export function Canvas() {
     function onMove(event: PointerEvent) {
       const dx = event.clientX - resizeStart.current.x;
       const dy = event.clientY - resizeStart.current.y;
+      const isAi = boxes[id]?.kind === "ai";
       resizeBox(
         id,
-        Math.max(80, resizeStart.current.w + dx),
-        Math.max(60, resizeStart.current.h + dy),
+        Math.max(isAi ? 260 : 80, resizeStart.current.w + dx),
+        Math.max(isAi ? 280 : 60, resizeStart.current.h + dy),
       );
     }
 
@@ -569,7 +574,7 @@ export function Canvas() {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [resizingId, resizeBox]);
+  }, [boxes, resizingId, resizeBox]);
 
   useEffect(() => {
     if (!drawingId) return;
@@ -668,11 +673,12 @@ export function Canvas() {
     );
     for (const [aiId, ai] of Object.entries(boxes)) {
       if (ai.kind !== "ai") continue;
+      const size = getItemSize(ai);
       const aiRect = {
         x: ai.x,
         y: ai.y,
-        width: AI_WIDTH,
-        height: AI_HEIGHT,
+        width: size.width,
+        height: size.height,
       };
       const ids: string[] = [];
       const labels: string[] = [];
@@ -1131,6 +1137,14 @@ export function Canvas() {
                   }}
                   onClose={() => setSelectedId(null)}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                  onResizeStart={(event) =>
+                    startResize(
+                      event,
+                      id,
+                      box.width ?? AI_WIDTH,
+                      box.height ?? AI_HEIGHT,
+                    )
+                  }
                   onOutputDown={(event) => onOutputDown(event, id)}
                   onInputUp={(event) => onInputUp(event, id)}
                   onPropagateOutput={(text) => feedConnectedPrompts(id, text)}

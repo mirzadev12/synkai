@@ -82,7 +82,12 @@ export function getItemSize(box: {
   width?: number;
   height?: number;
 }): { width: number; height: number } {
-  if (box.kind === "ai") return { width: AI_WIDTH, height: AI_HEIGHT };
+  if (box.kind === "ai") {
+    return {
+      width: box.width ?? AI_WIDTH,
+      height: box.height ?? AI_HEIGHT,
+    };
+  }
   if (
     box.kind === "trigger" ||
     box.kind === "condition" ||

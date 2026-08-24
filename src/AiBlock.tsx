@@ -1,6 +1,11 @@
 import { useMutation } from "@liveblocks/react/suspense";
 import { useEffect, useState } from "react";
-import type { AiModel, BoxData } from "./liveblocks.config";
+import {
+  AI_HEIGHT,
+  AI_WIDTH,
+  type AiModel,
+  type BoxData,
+} from "./liveblocks.config";
 import { WORKSPACE_ID } from "./workspaceId";
 
 type AiBlockProps = {
@@ -12,6 +17,7 @@ type AiBlockProps = {
   onSelect: () => void;
   onClose: () => void;
   onDragStart: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onResizeStart: (event: React.PointerEvent<HTMLDivElement>) => void;
   onOutputDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onInputUp: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onPropagateOutput: (output: string) => void;
@@ -91,6 +97,7 @@ export function AiBlock({
   onSelect,
   onClose,
   onDragStart,
+  onResizeStart,
   onOutputDown,
   onInputUp,
   onPropagateOutput,
@@ -177,15 +184,18 @@ export function AiBlock({
     }
   }
 
-  const spatialLabel =
-    nearbyNoteLabels.length > 0
-      ? `Nearby: ${nearbyNoteLabels.join(", ")}`
-      : null;
-  const memoryLabel = `Team memory: ${memoryCount} event${memoryCount === 1 ? "" : "s"}`;
+  const width = box.width ?? AI_WIDTH;
+  const height = box.height ?? AI_HEIGHT;
+  const agentStatus = running
+    ? "Thinking"
+    : box.status === "error"
+      ? "Needs a retry"
+      : "Ready";
 
   return (
     <div
       className={`box ai-block ai-chat${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
+      style={{ width, height }}
       onPointerDown={() => onSelect()}
     >
       <button
@@ -205,9 +215,15 @@ export function AiBlock({
       />
 
       <div className="ai-chat-header" onPointerDown={onDragStart}>
-        <span className="material-symbols-outlined ai-chat-logo" aria-hidden>
-          {modelIcon(model)}
+        <span className="ai-agent-avatar" aria-hidden>
+          <span className="material-symbols-outlined">{modelIcon(model)}</span>
         </span>
+        <div className="ai-agent-meta">
+          <strong className="ai-agent-name">Agent</strong>
+          <span className={`ai-agent-status${running ? " is-busy" : ""}`}>
+            {agentStatus}
+          </span>
+        </div>
         <select
           className="ai-model"
           value={model}
@@ -246,13 +262,17 @@ export function AiBlock({
 
       <div className="ai-chat-messages">
         <div className="ai-context-hint">
-          {spatialLabel ? <div>{spatialLabel}</div> : null}
-          <div>{memoryLabel}</div>
+          {nearbyNoteLabels.length > 0
+            ? `Notices nearby: ${nearbyNoteLabels.join(", ")}`
+            : "Listening to nearby notes and team memory"}
+          {memoryCount > 0 ? ` · ${memoryCount} memories` : ""}
         </div>
         {prompt.trim() ? (
           <div className="ai-bubble ai-bubble-user">{prompt}</div>
         ) : (
-          <p className="ai-chat-empty">Ask {modelLabel(model)} anything…</p>
+          <p className="ai-chat-empty">
+            Hi — I’m your {modelLabel(model)} agent. What should we work on?
+          </p>
         )}
         {running ? (
           <div className="ai-bubble ai-bubble-ai ai-bubble-pending">
@@ -267,7 +287,7 @@ export function AiBlock({
           </div>
         ) : null}
         {answeredBy && !running ? (
-          <div className="ai-answered">Answered by {answeredBy}</div>
+          <div className="ai-answered">{answeredBy} agent</div>
         ) : null}
       </div>
 
@@ -281,7 +301,7 @@ export function AiBlock({
         <input
           className="ai-prompt"
           type="text"
-          placeholder="Message…"
+          placeholder={`Message ${modelLabel(model)}…`}
           value={prompt}
           onChange={(event) => updateAi({ prompt: event.target.value })}
         />
@@ -293,6 +313,11 @@ export function AiBlock({
           {running ? "…" : "Send"}
         </button>
       </form>
+
+      <div
+        className="resize-handle"
+        onPointerDown={onResizeStart}
+      />
 
       {comingSoon ? (
         <div
