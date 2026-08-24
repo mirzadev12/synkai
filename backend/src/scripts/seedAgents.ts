@@ -20,7 +20,7 @@ async function ensureWorkspace(workspaceId?: string): Promise<string> {
 
   const { data, error } = await getSupabase()
     .from("workspaces")
-    .insert({ name: "SYNKAI demo workspace" })
+    .insert({ name: "Synk AI demo workspace" })
     .select("id")
     .single();
 

@@ -17,6 +17,7 @@ import {
 } from "./canvasGeometry";
 import { ComparePanel } from "./ComparePanel";
 import { ConnectionsLayer } from "./ConnectionsLayer";
+import { DocsPanel } from "./DocsPanel";
 import { creatorFromSelf } from "./creatorMeta";
 import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
@@ -36,6 +37,7 @@ import { StickyNote } from "./StickyNote";
 import { StrokeItem } from "./StrokeItem";
 import { TeamMemoryPanel } from "./TeamMemoryPanel";
 import { TextItem } from "./TextItem";
+import { ThemeToggle } from "./ThemeToggle";
 import { WorkflowTracePanel } from "./WorkflowTracePanel";
 import { extractConnectedWorkflow } from "./workflowGraph";
 import {
@@ -72,6 +74,7 @@ export function Canvas() {
   const [linkCursor, setLinkCursor] = useState<Point | null>(null);
   const [overTrash, setOverTrash] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -878,10 +881,10 @@ export function Canvas() {
   }
 
   return (
-    <div className="app">
+    <div className={`app${docsOpen ? " docs-open" : ""}`}>
       <header className="toolbar">
         <div className="toolbar-brand-row">
-          <strong className="brand-wordmark">SYNKAI</strong>
+          <strong className="brand-wordmark">Synk AI</strong>
           <span className="toolbar-rule" aria-hidden />
           <span className="workspace-tab">Workspace Alpha</span>
         </div>
@@ -901,6 +904,14 @@ export function Canvas() {
           >
             Memory
           </button>
+          <button
+            type="button"
+            className={`nav-ghost${docsOpen ? " nav-ghost-active" : ""}`}
+            onClick={() => setDocsOpen((open) => !open)}
+          >
+            Docs
+          </button>
+          <ThemeToggle />
           <button
             type="button"
             className="nav-ghost"
@@ -1038,6 +1049,8 @@ export function Canvas() {
         refreshKey={memoryRefreshKey}
       />
 
+      <DocsPanel open={docsOpen} onClose={() => setDocsOpen(false)} />
+
       <WorkflowTracePanel
         open={traceOpen}
         onClose={() => setTraceOpen(false)}
@@ -1116,6 +1129,7 @@ export function Canvas() {
                     setSelectedId(id);
                     setSelectedConnectionId(null);
                   }}
+                  onClose={() => setSelectedId(null)}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onOutputDown={(event) => onOutputDown(event, id)}
                   onInputUp={(event) => onInputUp(event, id)}

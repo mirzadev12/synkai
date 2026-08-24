@@ -1,4 +1,4 @@
-# SYNKAI
+# Synk AI
 
 Multiplayer canvas (Vite + React + Liveblocks) with multi-model AI blocks, plus an
 **orchestration & memory backend** (Express + Supabase) for sequential multi-agent handoffs.

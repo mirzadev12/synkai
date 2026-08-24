@@ -26,5 +26,5 @@ app.use("/api", orchestrationRoutes);
 app.use("/api", workflowRoutes);
 
 app.listen(port, () => {
-  console.log(`SYNKAI orchestration API listening on http://localhost:${port}`);
+  console.log(`Synk AI orchestration API listening on http://localhost:${port}`);
 });

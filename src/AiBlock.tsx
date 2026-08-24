@@ -10,6 +10,7 @@ type AiBlockProps = {
   selected: boolean;
   nearbyNoteLabels: string[];
   onSelect: () => void;
+  onClose: () => void;
   onDragStart: (event: React.PointerEvent<HTMLDivElement>) => void;
   onOutputDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onInputUp: (event: React.PointerEvent<HTMLButtonElement>) => void;
@@ -73,6 +74,14 @@ async function logAiOutput(args: {
   }
 }
 
+function modelIcon(model: AiModel) {
+  return model === "groq" ? "bolt" : "auto_awesome";
+}
+
+function modelLabel(model: AiModel) {
+  return model === "groq" ? "Groq" : "Gemini";
+}
+
 export function AiBlock({
   id,
   box,
@@ -80,6 +89,7 @@ export function AiBlock({
   selected,
   nearbyNoteLabels,
   onSelect,
+  onClose,
   onDragStart,
   onOutputDown,
   onInputUp,
@@ -93,6 +103,7 @@ export function AiBlock({
   const answeredBy = box.answeredBy ?? "";
   const running = box.status === "running";
   const [memoryCount, setMemoryCount] = useState(0);
+  const [comingSoon, setComingSoon] = useState<string | null>(null);
 
   const updateAi = useMutation(
     (
@@ -174,7 +185,7 @@ export function AiBlock({
 
   return (
     <div
-      className={`box ai-block${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
+      className={`box ai-block ai-chat${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
       onPointerDown={() => onSelect()}
     >
       <button
@@ -193,41 +204,114 @@ export function AiBlock({
         onPointerDown={onOutputDown}
       />
 
-      <div className="ai-block-handle" onPointerDown={onDragStart}>
-        AI Block
+      <div className="ai-chat-header" onPointerDown={onDragStart}>
+        <span className="material-symbols-outlined ai-chat-logo" aria-hidden>
+          {modelIcon(model)}
+        </span>
+        <select
+          className="ai-model"
+          value={model}
+          aria-label="Model"
+          onPointerDown={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "claude" || value === "midjourney") {
+              setComingSoon(value === "claude" ? "Claude" : "Midjourney");
+              return;
+            }
+            updateAi({ model: value as AiModel });
+          }}
+        >
+          <option value="gemini">Gemini</option>
+          <option value="groq">Groq</option>
+          <option value="claude">Claude</option>
+          <option value="midjourney">Midjourney</option>
+        </select>
+        <button
+          type="button"
+          className="ai-chat-close"
+          title="Deselect"
+          aria-label="Close chat"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+        >
+          <span className="material-symbols-outlined" aria-hidden>
+            close
+          </span>
+        </button>
       </div>
-      <select
-        className="ai-model"
-        value={model}
-        onChange={(event) =>
-          updateAi({ model: event.target.value as AiModel })
-        }
-      >
-        <option value="gemini">Gemini</option>
-        <option value="groq">Groq</option>
-      </select>
-      <input
-        className="ai-prompt"
-        type="text"
-        placeholder="Type a prompt"
-        value={prompt}
-        onChange={(event) => updateAi({ prompt: event.target.value })}
-      />
-      <div className="ai-context-hint">
-        {spatialLabel ? <div>{spatialLabel}</div> : null}
-        <div>{memoryLabel}</div>
+
+      <div className="ai-chat-messages">
+        <div className="ai-context-hint">
+          {spatialLabel ? <div>{spatialLabel}</div> : null}
+          <div>{memoryLabel}</div>
+        </div>
+        {prompt.trim() ? (
+          <div className="ai-bubble ai-bubble-user">{prompt}</div>
+        ) : (
+          <p className="ai-chat-empty">Ask {modelLabel(model)} anything…</p>
+        )}
+        {running ? (
+          <div className="ai-bubble ai-bubble-ai ai-bubble-pending">
+            Thinking…
+          </div>
+        ) : null}
+        {!running && output ? (
+          <div
+            className={`ai-bubble ai-bubble-ai${box.status === "error" ? " ai-bubble-error" : ""}`}
+          >
+            {output}
+          </div>
+        ) : null}
+        {answeredBy && !running ? (
+          <div className="ai-answered">Answered by {answeredBy}</div>
+        ) : null}
       </div>
-      <button
-        type="button"
-        className="ai-run"
-        disabled={running}
-        onClick={() => void onRun()}
+
+      <form
+        className="ai-chat-composer"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onRun();
+        }}
       >
-        {running ? "Running…" : "Run"}
-      </button>
-      <div className="ai-output">{output}</div>
-      {answeredBy ? (
-        <div className="ai-answered">Answered by {answeredBy}</div>
+        <input
+          className="ai-prompt"
+          type="text"
+          placeholder="Message…"
+          value={prompt}
+          onChange={(event) => updateAi({ prompt: event.target.value })}
+        />
+        <button
+          type="submit"
+          className="ai-run"
+          disabled={running}
+        >
+          {running ? "…" : "Send"}
+        </button>
+      </form>
+
+      {comingSoon ? (
+        <div
+          className="coming-soon-pop"
+          role="dialog"
+          aria-label={`${comingSoon} coming soon`}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <p>
+            <strong>{comingSoon}</strong> is coming soon on this canvas.
+          </p>
+          <button
+            type="button"
+            className="ai-run"
+            onClick={() => setComingSoon(null)}
+          >
+            OK
+          </button>
+        </div>
       ) : null}
     </div>
   );

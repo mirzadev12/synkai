@@ -69,8 +69,8 @@ export type BoxData = {
   creatorId?: string;
 };
 
-export const AI_WIDTH = 280;
-export const AI_HEIGHT = 260;
+export const AI_WIDTH = 300;
+export const AI_HEIGHT = 340;
 export const WF_WIDTH = 260;
 export const WF_HEIGHT = 228;
 export const BOX_WIDTH = 160;
