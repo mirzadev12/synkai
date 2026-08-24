@@ -102,7 +102,7 @@ export function TeamMemoryPanel({
         </button>
       </div>
       <p className="team-memory-sub">
-        Recent workspace events (newest first). Shared by every AI Block.
+        Collaborative history — newest first, shared by every AI Block.
       </p>
       {loading ? <p className="team-memory-status">Loading…</p> : null}
       {error ? <p className="team-memory-error">{error}</p> : null}

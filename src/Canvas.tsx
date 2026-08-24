@@ -880,119 +880,105 @@ export function Canvas() {
   return (
     <div className="app">
       <header className="toolbar">
-        <div className="toolbar-left">
+        <div className="toolbar-brand-row">
           <strong className="brand-wordmark">SYNKAI</strong>
-          <PresenceBar />
+          <span className="toolbar-rule" aria-hidden />
+          <span className="workspace-tab">Workspace Alpha</span>
         </div>
-        <div className="toolbar-actions">
-          <button type="button" className="add-btn" onClick={() => addBox()}>
-            Box
-          </button>
-          <button type="button" className="add-btn" onClick={() => addAiBlock()}>
-            AI Block
-          </button>
+        <div className="toolbar-right">
+          <PresenceBar />
           <button
             type="button"
-            className="add-btn"
-            onClick={() => addWorkflowNode("trigger")}
-          >
-            Trigger
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => addWorkflowNode("condition")}
-          >
-            Condition
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => addWorkflowNode("transform")}
-          >
-            Transform
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => addWorkflowNode("output")}
-          >
-            Output
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => void onSaveWorkflow()}
-            disabled={saveBusy}
-          >
-            {saveBusy ? "Saving…" : "Save as Workflow"}
-          </button>
-          <button
-            type="button"
-            className="add-btn"
+            className="nav-ghost"
             onClick={() => setCompareOpen(true)}
           >
             Compare
           </button>
           <button
             type="button"
-            className={`add-btn${memoryOpen ? " add-btn-active" : ""}`}
+            className={`nav-ghost${memoryOpen ? " nav-ghost-active" : ""}`}
             onClick={() => setMemoryOpen((open) => !open)}
           >
-            Team Memory
+            Memory
           </button>
           <button
             type="button"
-            className={`add-btn${traceOpen ? " add-btn-active" : ""}`}
+            className="nav-ghost"
+            onClick={() => void onSaveWorkflow()}
+            disabled={saveBusy}
+          >
+            {saveBusy ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            className={`nav-run${traceOpen ? " nav-run-active" : ""}`}
             onClick={() => setTraceOpen((open) => !open)}
           >
-            Run Trace
-          </button>
-          <button type="button" className="add-btn" onClick={() => addSticky()}>
-            Sticky
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            Image
-          </button>
-          <button type="button" className="add-btn" onClick={() => addText()}>
-            Text
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => addShape("rect")}
-          >
-            Rectangle
-          </button>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={() => addShape("ellipse")}
-          >
-            Circle
-          </button>
-          <button
-            type="button"
-            className={`add-btn${tool === "pen" ? " add-btn-active" : ""}`}
-            onClick={() => setTool((t) => (t === "pen" ? "select" : "pen"))}
-          >
-            Pen
-          </button>
-          <button
-            type="button"
-            className={`add-btn${tool === "eraser" ? " add-btn-active" : ""}`}
-            onClick={() =>
-              setTool((t) => (t === "eraser" ? "select" : "eraser"))
-            }
-          >
-            Eraser
+            Run
           </button>
         </div>
       </header>
+
+      <div className="tool-dock" role="toolbar" aria-label="Canvas tools">
+        <DockButton
+          icon="bolt"
+          label="Trigger"
+          onClick={() => addWorkflowNode("trigger")}
+        />
+        <DockButton
+          icon="psychology"
+          label="AI Agent"
+          onClick={() => addAiBlock()}
+        />
+        <DockButton
+          icon="alt_route"
+          label="Condition"
+          onClick={() => addWorkflowNode("condition")}
+        />
+        <DockButton
+          icon="auto_fix_high"
+          label="Transform"
+          onClick={() => addWorkflowNode("transform")}
+        />
+        <DockButton
+          icon="output"
+          label="Output"
+          onClick={() => addWorkflowNode("output")}
+        />
+        <DockButton icon="sticky_note_2" label="Note" onClick={() => addSticky()} />
+        <span className="dock-split" aria-hidden />
+        <DockButton icon="crop_square" label="Box" onClick={() => addBox()} />
+        <DockButton
+          icon="image"
+          label="Image"
+          onClick={() => fileInputRef.current?.click()}
+        />
+        <DockButton icon="title" label="Text" onClick={() => addText()} />
+        <DockButton
+          icon="rectangle"
+          label="Rect"
+          onClick={() => addShape("rect")}
+        />
+        <DockButton
+          icon="circle"
+          label="Circle"
+          onClick={() => addShape("ellipse")}
+        />
+        <DockButton
+          icon="edit"
+          label="Pen"
+          active={tool === "pen"}
+          onClick={() => setTool((t) => (t === "pen" ? "select" : "pen"))}
+        />
+        <DockButton
+          icon="ink_eraser"
+          label="Eraser"
+          active={tool === "eraser"}
+          onClick={() =>
+            setTool((t) => (t === "eraser" ? "select" : "eraser"))
+          }
+        />
+      </div>
 
       {tool === "pen" || tool === "eraser" ? (
         <div className="pen-bar">
@@ -1065,6 +1051,21 @@ export function Canvas() {
         className={`canvas${tool === "pen" || tool === "eraser" ? " canvas-pen" : ""}${tool === "eraser" ? " canvas-eraser" : ""}`}
         onPointerDown={onCanvasPointerDown}
       >
+        {entries.length === 0 ? (
+          <div className="empty-canvas">
+            <div className="empty-orb">
+              <span className="material-symbols-outlined" aria-hidden>
+                dashboard_customize
+              </span>
+            </div>
+            <h2 className="empty-title">Start building</h2>
+            <p className="empty-copy">
+              Add your first block from the toolbar above to begin constructing
+              your AI thought-stream.
+            </p>
+          </div>
+        ) : null}
+
         <ConnectionsLayer
           boxes={boxes}
           selectedConnectionId={selectedConnectionId}
@@ -1348,5 +1349,31 @@ export function Canvas() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DockButton({
+  icon,
+  label,
+  onClick,
+  active,
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`dock-btn${active ? " dock-btn-active" : ""}`}
+      title={label}
+      onClick={onClick}
+    >
+      <span className="material-symbols-outlined" aria-hidden>
+        {icon}
+      </span>
+      <span className="dock-label">{label}</span>
+    </button>
   );
 }
