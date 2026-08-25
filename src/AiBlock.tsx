@@ -1,11 +1,12 @@
 import { useMutation } from "@liveblocks/react/suspense";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import {
   AI_HEIGHT,
   AI_WIDTH,
   type AiModel,
   type BoxData,
 } from "./liveblocks.config";
+import { requestAi } from "./runAiClient";
 import { WORKSPACE_ID } from "./workspaceId";
 
 type AiBlockProps = {
@@ -14,7 +15,7 @@ type AiBlockProps = {
   dragging: boolean;
   selected: boolean;
   nearbyNoteLabels: string[];
-  onSelect: () => void;
+  onSelect: (event: React.PointerEvent) => void;
   onClose: () => void;
   onDragStart: (event: React.PointerEvent<HTMLDivElement>) => void;
   onResizeStart: (event: React.PointerEvent<HTMLDivElement>) => void;
@@ -88,7 +89,9 @@ function modelLabel(model: AiModel) {
   return model === "groq" ? "Groq" : "Gemini";
 }
 
-export function AiBlock({
+export const AiBlock = memo(AiBlockInner);
+
+function AiBlockInner({
   id,
   box,
   dragging,
@@ -110,6 +113,7 @@ export function AiBlock({
   const answeredBy = box.answeredBy ?? "";
   const running = box.status === "running";
   const [memoryCount, setMemoryCount] = useState(0);
+  const memoryCache = useRef({ formatted: "", count: 0 });
   const [comingSoon, setComingSoon] = useState<string | null>(null);
   const [modelSelectKey, setModelSelectKey] = useState(0);
 
@@ -128,7 +132,10 @@ export function AiBlock({
   useEffect(() => {
     let cancelled = false;
     void fetchWorkspaceMemory().then((mem) => {
-      if (!cancelled) setMemoryCount(mem.count);
+      if (!cancelled) {
+        memoryCache.current = mem;
+        setMemoryCount(mem.count);
+      }
     });
     return () => {
       cancelled = true;
@@ -140,44 +147,33 @@ export function AiBlock({
     updateAi({ status: "running", output: "", answeredBy: "" });
     try {
       const spatialPrompt = buildPrompt(prompt);
-      const memory = await fetchWorkspaceMemory();
-      setMemoryCount(memory.count);
+      const cached = memoryCache.current;
+      const memoryPromise = fetchWorkspaceMemory().then((mem) => {
+        memoryCache.current = mem;
+        setMemoryCount(mem.count);
+        return mem;
+      });
+      const memory =
+        cached.formatted || cached.count
+          ? cached
+          : await memoryPromise;
+      void memoryPromise;
       const finalPrompt = memory.formatted
         ? `Team memory (recent workspace events):\n${memory.formatted}\n\n${spatialPrompt}`
         : spatialPrompt;
 
-      const response = await fetch("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: finalPrompt, model }),
-      });
-      const payload: unknown = await response.json();
-      const record =
-        payload && typeof payload === "object" && !Array.isArray(payload)
-          ? (payload as Record<string, unknown>)
-          : {};
-      if (!response.ok) {
-        const message =
-          typeof record.error === "string" ? record.error : "Request failed";
-        throw new Error(message);
-      }
-      const text = typeof record.text === "string" ? record.text : "";
-      const by =
-        record.answeredBy === "Groq" || record.answeredBy === "Gemini"
-          ? record.answeredBy
-          : model === "groq"
-            ? "Groq"
-            : "Gemini";
-      updateAi({ output: text, answeredBy: by, status: "idle" });
+      const { text, answeredBy } = await requestAi(finalPrompt, model);
+      updateAi({ output: text, answeredBy, status: "idle" });
       onPropagateOutput(text);
-      await logAiOutput({
+      void logAiOutput({
         blockId: id,
         model,
         prompt,
         content: text,
+      }).then(() => {
+        setMemoryCount((n) => n + 1);
+        onMemoryLogged?.();
       });
-      setMemoryCount((n) => n + 1);
-      onMemoryLogged?.();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Request failed";
@@ -197,7 +193,7 @@ export function AiBlock({
     <div
       className={`box ai-block ai-chat${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
       style={{ width, height }}
-      onPointerDown={() => onSelect()}
+      onPointerDown={(event) => onSelect(event)}
     >
       <button
         type="button"

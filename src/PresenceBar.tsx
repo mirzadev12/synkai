@@ -1,35 +1,20 @@
-import {
-  useOthers,
-  useSelf,
-  useUpdateMyPresence,
-} from "@liveblocks/react/suspense";
-import { useEffect, useState } from "react";
-import { colorForUser, loadUserName, saveUserName } from "./userName";
+import { useOthers, useSelf, useUpdateMyPresence } from "@liveblocks/react/suspense";
+import { useEffect } from "react";
+import { colorForUser, loadUserName } from "./userName";
 
 export function PresenceBar() {
   const self = useSelf();
   const others = useOthers();
   const updatePresence = useUpdateMyPresence();
-  const [draft, setDraft] = useState(() => loadUserName());
 
   useEffect(() => {
     const saved = loadUserName();
-    if (saved) {
-      setDraft(saved);
-      updatePresence({ name: saved });
-    }
+    if (saved) updatePresence({ name: saved });
   }, [updatePresence]);
-
-  function commitName() {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    saveUserName(trimmed);
-    updatePresence({ name: trimmed });
-  }
 
   const selfId = self ? String(self.connectionId) : "self";
   const selfName =
-    (self?.presence.name ?? "").trim() || draft.trim() || "You";
+    (self?.presence.name ?? "").trim() || loadUserName() || "You";
 
   const online = [
     { id: selfId, name: selfName, you: true },
@@ -40,32 +25,20 @@ export function PresenceBar() {
     })),
   ];
 
+  const count = 1 + others.length;
+
   return (
     <div className="presence-bar">
-      <label className="name-field">
-        <span className="name-label">Your name</span>
-        <input
-          className="name-input"
-          type="text"
-          placeholder="Enter your name"
-          value={draft}
-          maxLength={32}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commitName}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.currentTarget.blur();
-              commitName();
-            }
-          }}
-        />
-      </label>
+      <span className="presence-count" title={`${count} in this workspace`}>
+        {count} online
+      </span>
       <div className="online-list" aria-label="People online">
         {online.map((person) => (
           <span
             key={person.id}
             className="online-chip"
             style={{ borderColor: colorForUser(person.id) }}
+            title={person.you ? `${person.name} (you)` : person.name}
           >
             <span
               className="online-dot"

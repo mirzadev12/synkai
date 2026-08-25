@@ -7,7 +7,7 @@ type TriggerBlockProps = {
   dragging: boolean;
   selected: boolean;
   running: boolean;
-  onSelect: () => void;
+  onSelect: (event: React.PointerEvent) => void;
   onDragStart: (event: React.PointerEvent<HTMLDivElement>) => void;
   onOutputDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onRunWorkflow: () => void;
@@ -41,7 +41,7 @@ export function TriggerBlock({
   return (
     <div
       className={`box wf-block${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
-      onPointerDown={() => onSelect()}
+      onPointerDown={(event) => onSelect(event)}
     >
       <button
         type="button"

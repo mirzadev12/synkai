@@ -21,7 +21,11 @@ import { DocsPanel } from "./DocsPanel";
 import { creatorFromSelf } from "./creatorMeta";
 import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
+import { NameGate } from "./NameGate";
 import { PresenceBar } from "./PresenceBar";
+import { requestAi } from "./runAiClient";
+import { upsertLinkedContext } from "./linkedContext";
+import { loadUserName } from "./userName";
 import {
   AI_HEIGHT,
   AI_WIDTH,
@@ -65,7 +69,14 @@ export function Canvas() {
   const [drawingId, setDrawingId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [resizingId, setResizingId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [marquee, setMarquee] = useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const [nameReady, setNameReady] = useState(() => Boolean(loadUserName()));
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(
     null,
   );
@@ -84,6 +95,11 @@ export function Canvas() {
   const [saveBusy, setSaveBusy] = useState(false);
 
   const dragOffset = useRef({ x: 0, y: 0 });
+  const dragGroupRef = useRef<string[]>([]);
+  const dragOriginsRef = useRef<Record<string, { x: number; y: number }>>({});
+  const pointerOriginRef = useRef({ x: 0, y: 0 });
+  const selectedIdsRef = useRef<string[]>([]);
+  selectedIdsRef.current = selectedIds;
   const resizeStart = useRef({ x: 0, y: 0, w: 0, h: 0 });
   const drawPoints = useRef<Point[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -208,8 +224,10 @@ export function Canvas() {
       const baseX = 80;
       const baseY = 80;
       const creator = creatorFromSelf(self);
+      const ids: string[] = [];
       for (let i = 0; i < models.length; i += 1) {
         const id = crypto.randomUUID();
+        ids.push(id);
         storage.get("boxes").set(
           id,
           new LiveObject({
@@ -228,6 +246,7 @@ export function Canvas() {
           }),
         );
       }
+      return ids;
     },
     [],
   );
@@ -377,6 +396,31 @@ export function Canvas() {
     [],
   );
 
+  const moveBoxes = useMutation(
+    ({ storage }, updates: { id: string; x: number; y: number }[]) => {
+      const map = storage.get("boxes");
+      for (const update of updates) {
+        map.get(update.id)?.update({ x: update.x, y: update.y });
+      }
+    },
+    [],
+  );
+
+  const patchAi = useMutation(
+    (
+      { storage },
+      id: string,
+      patch: Partial<{
+        output: string;
+        answeredBy: string;
+        status: "idle" | "running" | "error";
+      }>,
+    ) => {
+      storage.get("boxes").get(id)?.update(patch);
+    },
+    [],
+  );
+
   const resizeBox = useMutation(
     ({ storage }, id: string, width: number, height: number) => {
       storage.get("boxes").get(id)?.update({ width, height });
@@ -444,6 +488,11 @@ export function Canvas() {
   const feedConnectedPrompts = useMutation(
     ({ storage }, fromId: string, output: string) => {
       const map = storage.get("boxes");
+      const source = map.get(fromId);
+      const sourceLabel =
+        (source?.get("text") ?? "").trim() ||
+        (source?.get("model") === "groq" ? "Groq" : "Gemini") ||
+        "AI Block";
       for (const [, live] of map) {
         if (live.get("kind") !== "connection" || live.get("fromId") !== fromId) {
           continue;
@@ -452,9 +501,10 @@ export function Canvas() {
         if (!toId) continue;
         const target = map.get(toId);
         if (!target || target.get("kind") !== "ai") continue;
-        const existing = (target.get("prompt") ?? "").trim();
-        const next = existing ? `${output}\n\n---\n\n${existing}` : output;
-        target.update({ prompt: next });
+        const existing = target.get("prompt") ?? "";
+        target.update({
+          prompt: upsertLinkedContext(existing, fromId, sourceLabel, output),
+        });
       }
     },
     [],
@@ -500,23 +550,39 @@ export function Canvas() {
 
   useEffect(() => {
     if (!draggingId) return;
-    const id = draggingId;
-    const item = boxes[id];
-    if (!item || item.kind === "stroke" || item.kind === "connection") return;
-    const { width, height } = getItemSize(item);
 
     function onMove(event: PointerEvent) {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left - dragOffset.current.x;
-      const y = event.clientY - rect.top - dragOffset.current.y;
-      const maxX = Math.max(0, rect.width - width);
-      const maxY = Math.max(0, rect.height - height);
-      const nextX = Math.min(Math.max(0, x), maxX);
-      const nextY = Math.min(Math.max(0, y), maxY);
-      moveBox(id, nextX, nextY);
-      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const point = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      };
+      const dx = point.x - pointerOriginRef.current.x;
+      const dy = point.y - pointerOriginRef.current.y;
+      const group = dragGroupRef.current;
+      const updates: { id: string; x: number; y: number }[] = [];
+      for (const gid of group) {
+        const origin = dragOriginsRef.current[gid];
+        const item = boxes[gid];
+        if (!origin || !item || item.kind === "stroke" || item.kind === "connection") {
+          continue;
+        }
+        const { width, height } = getItemSize(item);
+        const maxX = Math.max(0, rect.width - width);
+        const maxY = Math.max(0, rect.height - height);
+        updates.push({
+          id: gid,
+          x: Math.min(Math.max(0, origin.x + dx), maxX),
+          y: Math.min(Math.max(0, origin.y + dy), maxY),
+        });
+      }
+      if (updates.length === 1) {
+        moveBox(updates[0].id, updates[0].x, updates[0].y);
+      } else if (updates.length > 1) {
+        moveBoxes(updates);
+      }
       setOverTrash(isOverTrash(point));
     }
 
@@ -529,12 +595,14 @@ export function Canvas() {
           y: event.clientY - rect.top,
         };
         if (isOverTrash(point)) {
-          deleteItems([id]);
-          setSelectedId(null);
+          const ids = dragGroupRef.current;
+          deleteItems(ids);
+          clearSelection();
         }
       }
       setDraggingId(null);
       setOverTrash(false);
+      dragGroupRef.current = [];
     }
 
     window.addEventListener("pointermove", onMove);
@@ -545,7 +613,7 @@ export function Canvas() {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
     };
-  }, [boxes, draggingId, moveBox, deleteItems]);
+  }, [boxes, draggingId, moveBox, moveBoxes, deleteItems]);
 
   useEffect(() => {
     if (!resizingId) return;
@@ -654,15 +722,15 @@ export function Canvas() {
         setSelectedConnectionId(null);
         return;
       }
-      if (selectedId) {
+      if (selectedIds.length > 0) {
         event.preventDefault();
-        deleteItems([selectedId]);
-        setSelectedId(null);
+        deleteItems(selectedIds);
+        clearSelection();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedConnectionId, selectedId, deleteItems]);
+  }, [selectedConnectionId, selectedIds, deleteItems]);
 
   const nearbyByAi = useMemo(() => {
     const result: Record<string, { ids: string[]; labels: string[] }> = {};
@@ -703,6 +771,34 @@ export function Canvas() {
 
   const entries = Object.entries(boxes);
 
+  function clearSelection() {
+    setSelectedIds([]);
+  }
+
+  function applySelection(ids: string[]) {
+    setSelectedIds(ids);
+  }
+
+  function selectItem(id: string, shiftKey: boolean) {
+    setSelectedConnectionId(null);
+    const prev = selectedIdsRef.current;
+    if (shiftKey) {
+      applySelection(
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      );
+      return;
+    }
+    applySelection([id]);
+  }
+
+  function isSelected(id: string) {
+    return selectedIds.includes(id);
+  }
+
+  function wrapClass(id: string, extra = "") {
+    return `item-wrap${isSelected(id) ? " item-selected" : ""}${extra}`;
+  }
+
   function startDrag(
     event: React.PointerEvent<HTMLDivElement>,
     id: string,
@@ -714,12 +810,33 @@ export function Canvas() {
     event.stopPropagation();
     const point = canvasPoint(event);
     if (!point) return;
+    const prev = selectedIdsRef.current;
+    let group: string[];
+    if (event.shiftKey) {
+      group = prev.includes(id) ? prev : [...prev, id];
+    } else if (prev.includes(id)) {
+      group = prev;
+    } else {
+      group = [id];
+    }
+    applySelection(group);
+    setSelectedConnectionId(null);
+    const movable = group.filter((gid) => {
+      const item = boxes[gid];
+      return item && item.kind !== "stroke" && item.kind !== "connection";
+    });
+    dragGroupRef.current = movable.length > 0 ? movable : [id];
+    dragOriginsRef.current = Object.fromEntries(
+      dragGroupRef.current.map((gid) => {
+        const item = boxes[gid];
+        return [gid, { x: item?.x ?? x, y: item?.y ?? y }];
+      }),
+    );
+    pointerOriginRef.current = point;
     dragOffset.current = {
       x: point.x - x,
       y: point.y - y,
     };
-    setSelectedId(id);
-    setSelectedConnectionId(null);
     setDraggingId(id);
   }
 
@@ -742,13 +859,13 @@ export function Canvas() {
 
   function onCanvasPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.target !== canvasRef.current) return;
-    setSelectedId(null);
     setSelectedConnectionId(null);
 
     const point = canvasPoint(event);
     if (!point) return;
 
     if (tool === "pen") {
+      clearSelection();
       event.preventDefault();
       const id = crypto.randomUUID();
       drawPoints.current = [point];
@@ -764,6 +881,7 @@ export function Canvas() {
     }
 
     if (tool === "eraser") {
+      clearSelection();
       event.preventDefault();
       eraseAtPoint(point);
       function onMove(moveEvent: PointerEvent) {
@@ -778,7 +896,61 @@ export function Canvas() {
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onUp);
+      return;
     }
+
+    event.preventDefault();
+    const origin = point;
+    let last = point;
+    let moved = false;
+    setMarquee({ x: point.x, y: point.y, w: 0, h: 0 });
+
+    function onMove(moveEvent: PointerEvent) {
+      const p = canvasPoint(moveEvent);
+      if (!p) return;
+      last = p;
+      if (Math.abs(p.x - origin.x) > 3 || Math.abs(p.y - origin.y) > 3) {
+        moved = true;
+      }
+      const x = Math.min(origin.x, p.x);
+      const y = Math.min(origin.y, p.y);
+      setMarquee({
+        x,
+        y,
+        w: Math.abs(p.x - origin.x),
+        h: Math.abs(p.y - origin.y),
+      });
+    }
+
+    function onUp() {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      setMarquee(null);
+      if (!moved) {
+        clearSelection();
+        return;
+      }
+      const left = Math.min(origin.x, last.x);
+      const top = Math.min(origin.y, last.y);
+      const right = Math.max(origin.x, last.x);
+      const bottom = Math.max(origin.y, last.y);
+      const hits: string[] = [];
+      for (const [id, box] of Object.entries(boxes)) {
+        if (box.kind === "connection") continue;
+        const size = getItemSize(box);
+        const bx1 = box.x + size.width;
+        const by1 = box.y + size.height;
+        if (box.x < right && bx1 > left && box.y < bottom && by1 > top) {
+          hits.push(id);
+        }
+      }
+      applySelection(hits);
+    }
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   }
 
   function onPickImage(event: React.ChangeEvent<HTMLInputElement>) {
@@ -886,8 +1058,32 @@ export function Canvas() {
     return `Context from nearby notes on the canvas:\n${chunks.map((c) => `- ${c}`).join("\n")}\n\nUser prompt:\n${userPrompt}`;
   }
 
+  async function onCreateCompare(prompt: string, models: AiModel[]) {
+    const ids = addCompareBlocks(prompt, models);
+    applySelection(ids);
+    for (const id of ids) {
+      patchAi(id, { status: "running", output: "", answeredBy: "" });
+    }
+    await Promise.all(
+      ids.map(async (id, index) => {
+        const model = models[index];
+        try {
+          const { text, answeredBy } = await requestAi(prompt, model);
+          patchAi(id, { output: text, answeredBy, status: "idle" });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Request failed";
+          patchAi(id, { output: message, status: "error" });
+        }
+      }),
+    );
+  }
+
   return (
     <div className={`app${docsOpen ? " docs-open" : ""}`}>
+      {!nameReady ? (
+        <NameGate onDone={() => setNameReady(true)} />
+      ) : null}
       <header className="toolbar">
         <div className="toolbar-brand-row">
           <strong className="brand-wordmark">Synk AI</strong>
@@ -908,7 +1104,7 @@ export function Canvas() {
             className={`nav-ghost${memoryOpen ? " nav-ghost-active" : ""}`}
             onClick={() => setMemoryOpen((open) => !open)}
           >
-            Memory
+            Team Memory
           </button>
           <button
             type="button"
@@ -1046,7 +1242,7 @@ export function Canvas() {
       <ComparePanel
         open={compareOpen}
         onClose={() => setCompareOpen(false)}
-        onCreate={(prompt, models) => addCompareBlocks(prompt, models)}
+        onCreate={(prompt, models) => void onCreateCompare(prompt, models)}
       />
 
       <TeamMemoryPanel
@@ -1093,13 +1289,25 @@ export function Canvas() {
           draftTo={linkCursor}
           onSelectConnection={(id) => {
             setSelectedConnectionId(id);
-            setSelectedId(null);
+            clearSelection();
           }}
           onDeleteConnection={(id) => {
             deleteItems([id]);
             setSelectedConnectionId(null);
           }}
         />
+
+        {marquee && marquee.w + marquee.h > 0 ? (
+          <div
+            className="marquee-rect"
+            style={{
+              left: marquee.x,
+              top: marquee.y,
+              width: marquee.w,
+              height: marquee.h,
+            }}
+          />
+        ) : null}
 
         {entries.map(([id, box]) => {
           if (box.kind === "connection") return null;
@@ -1108,8 +1316,12 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap stroke-wrap"
+                className={wrapClass(id, " stroke-wrap")}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  selectItem(id, event.shiftKey);
+                }}
               >
                 <StrokeItem box={box} />
                 <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
@@ -1122,20 +1334,19 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <AiBlock
                   id={id}
                   box={box}
                   dragging={draggingId === id}
-                  selected={selectedId === id}
+                  selected={isSelected(id)}
                   nearbyNoteLabels={nearby.labels}
-                  onSelect={() => {
-                    setSelectedId(id);
-                    setSelectedConnectionId(null);
-                  }}
-                  onClose={() => setSelectedId(null)}
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
+                  onClose={() =>
+                    applySelection(selectedIds.filter((sid) => sid !== id))
+                  }
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onResizeStart={(event) =>
                     startResize(
@@ -1162,19 +1373,16 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <TriggerBlock
                   id={id}
                   box={box}
                   dragging={draggingId === id}
-                  selected={selectedId === id}
+                  selected={isSelected(id)}
                   running={workflowRunning}
-                  onSelect={() => {
-                    setSelectedId(id);
-                    setSelectedConnectionId(null);
-                  }}
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onOutputDown={(event) => onOutputDown(event, id)}
                   onRunWorkflow={() => void onRunWorkflow(id)}
@@ -1188,18 +1396,15 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <ConditionBlock
                   id={id}
                   box={box}
                   dragging={draggingId === id}
-                  selected={selectedId === id}
-                  onSelect={() => {
-                    setSelectedId(id);
-                    setSelectedConnectionId(null);
-                  }}
+                  selected={isSelected(id)}
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onInputUp={(event) => onInputUp(event, id)}
                   onTrueDown={(event) => onOutputDown(event, id, "true")}
@@ -1214,18 +1419,15 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <TransformBlock
                   id={id}
                   box={box}
                   dragging={draggingId === id}
-                  selected={selectedId === id}
-                  onSelect={() => {
-                    setSelectedId(id);
-                    setSelectedConnectionId(null);
-                  }}
+                  selected={isSelected(id)}
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onOutputDown={(event) => onOutputDown(event, id)}
                   onInputUp={(event) => onInputUp(event, id)}
@@ -1239,18 +1441,15 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <OutputBlock
                   id={id}
                   box={box}
                   dragging={draggingId === id}
-                  selected={selectedId === id}
-                  onSelect={() => {
-                    setSelectedId(id);
-                    setSelectedConnectionId(null);
-                  }}
+                  selected={isSelected(id)}
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onInputUp={(event) => onInputUp(event, id)}
                 />
@@ -1260,14 +1459,15 @@ export function Canvas() {
           }
 
           if (box.kind === "sticky") {
-            const inRange =
-              selectedId &&
-              boxes[selectedId]?.kind === "ai" &&
-              nearbyByAi[selectedId]?.ids.includes(id);
+            const inRange = selectedIds.some(
+              (sid) =>
+                boxes[sid]?.kind === "ai" &&
+                nearbyByAi[sid]?.ids.includes(id),
+            );
             return (
               <div
                 key={id}
-                className={`item-wrap${inRange ? " note-in-range" : ""}`}
+                className={wrapClass(id, inRange ? " note-in-range" : "")}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <StickyNote
@@ -1288,7 +1488,7 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <ImageItem
@@ -1309,7 +1509,7 @@ export function Canvas() {
             return (
               <div
                 key={id}
-                className="item-wrap"
+                className={wrapClass(id)}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <ShapeItem
@@ -1327,14 +1527,15 @@ export function Canvas() {
           }
 
           if (box.kind === "text") {
-            const inRange =
-              selectedId &&
-              boxes[selectedId]?.kind === "ai" &&
-              nearbyByAi[selectedId]?.ids.includes(id);
+            const inRange = selectedIds.some(
+              (sid) =>
+                boxes[sid]?.kind === "ai" &&
+                nearbyByAi[sid]?.ids.includes(id),
+            );
             return (
               <div
                 key={id}
-                className={`item-wrap${inRange ? " note-in-range" : ""}`}
+                className={wrapClass(id, inRange ? " note-in-range" : "")}
                 style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               >
                 <TextItem
@@ -1354,10 +1555,9 @@ export function Canvas() {
           return (
             <div
               key={id}
-              className={`box${draggingId === id ? " box-dragging" : ""}${selectedId === id ? " item-selected" : ""}`}
+              className={`box${draggingId === id ? " box-dragging" : ""}${isSelected(id) ? " item-selected" : ""}`}
               style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
               onPointerDown={(event) => {
-                setSelectedId(id);
                 startDrag(event, id, box.x, box.y);
               }}
             >

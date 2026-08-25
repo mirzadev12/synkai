@@ -39,7 +39,7 @@ export function ComparePanel({ open, onClose, onCreate }: ComparePanelProps) {
           </button>
         </div>
         <p className="compare-copy">
-          One prompt → multiple AI Blocks side by side on the canvas.
+          One prompt → multiple AI Blocks side by side, each model runs at once.
         </p>
         <input
           className="ai-prompt"
@@ -85,7 +85,7 @@ export function ComparePanel({ open, onClose, onCreate }: ComparePanelProps) {
           disabled={(gemini ? 1 : 0) + (groq ? 1 : 0) < 2}
           onClick={submit}
         >
-          Create comparison
+          Create & run
         </button>
       </div>
     </div>

@@ -6,7 +6,7 @@ type TransformBlockProps = {
   box: BoxData;
   dragging: boolean;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (event: React.PointerEvent) => void;
   onDragStart: (event: React.PointerEvent<HTMLDivElement>) => void;
   onOutputDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onInputUp: (event: React.PointerEvent<HTMLButtonElement>) => void;
@@ -41,7 +41,7 @@ export function TransformBlock({
   return (
     <div
       className={`box wf-block${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
-      onPointerDown={() => onSelect()}
+      onPointerDown={(event) => onSelect(event)}
     >
       <button
         type="button"
