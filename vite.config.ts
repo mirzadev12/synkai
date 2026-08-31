@@ -159,6 +159,44 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
         })().catch(next);
       });
 
+      server.middlewares.use("/api/rooms", (req, res, next) => {
+        void (async () => {
+          if (req.method !== "POST") {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+          }
+          const body = await readJsonBody(req);
+          const record =
+            body && typeof body === "object" && !Array.isArray(body)
+              ? (body as Record<string, unknown>)
+              : {};
+          const { ensureWorkspace } = await import(
+            "./backend/src/lib/ensureWorkspace.ts"
+          );
+          const {
+            liveblocksRoomId,
+            normalizeJoinCode,
+            randomJoinCode,
+            workspaceIdFromCode,
+          } = await import("./backend/src/lib/roomIdentity.ts");
+          const action = record.action === "join" ? "join" : "create";
+          const code =
+            action === "join"
+              ? normalizeJoinCode(
+                  typeof record.code === "string" ? record.code : "",
+                )
+              : randomJoinCode();
+          if (!code) {
+            sendJson(res, 400, { error: "Enter a 6-digit server code" });
+            return;
+          }
+          const workspaceId = workspaceIdFromCode(code);
+          const roomId = liveblocksRoomId(code);
+          await ensureWorkspace(workspaceId, `Server ${code}`);
+          sendJson(res, 200, { code, workspaceId, roomId });
+        })().catch(next);
+      });
+
       server.middlewares.use((req, res, next) => {
         const url = req.url ?? "";
         if (!url.startsWith("/api/workflows")) {

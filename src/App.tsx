@@ -7,8 +7,13 @@ import {
 } from "@liveblocks/react/suspense";
 import { useState } from "react";
 import { Canvas } from "./Canvas";
+import { ServerGate } from "./ServerGate";
+import {
+  loadServerSession,
+  type ServerSession,
+} from "./serverSession";
+import { WorkspaceProvider } from "./WorkspaceContext";
 
-const ROOM_ID = "synkai-shared-room";
 const publicApiKey = import.meta.env.VITE_LIVEBLOCKS_PUBLIC_KEY ?? "";
 
 function isConfiguredPublicKey(key: string) {
@@ -77,19 +82,34 @@ function RoomContents() {
 }
 
 export default function App() {
+  const [session, setSession] = useState<ServerSession | null>(() =>
+    loadServerSession(),
+  );
+
   if (!isConfiguredPublicKey(publicApiKey)) {
     return <SetupScreen />;
   }
 
+  if (!session) {
+    return (
+      <LiveblocksProvider publicApiKey={publicApiKey} throttle={16}>
+        <ServerGate onReady={setSession} />
+      </LiveblocksProvider>
+    );
+  }
+
   return (
     <LiveblocksProvider publicApiKey={publicApiKey} throttle={16}>
-      <RoomProvider
-        id={ROOM_ID}
-        initialPresence={{ name: "" }}
-        initialStorage={{ boxes: new LiveMap() }}
-      >
-        <RoomContents />
-      </RoomProvider>
+      <WorkspaceProvider value={session}>
+        <RoomProvider
+          key={session.roomId}
+          id={session.roomId}
+          initialPresence={{ name: "" }}
+          initialStorage={{ boxes: new LiveMap() }}
+        >
+          <RoomContents />
+        </RoomProvider>
+      </WorkspaceProvider>
     </LiveblocksProvider>
   );
 }

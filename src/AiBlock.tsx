@@ -7,7 +7,7 @@ import {
   type BoxData,
 } from "./liveblocks.config";
 import { requestAi } from "./runAiClient";
-import { WORKSPACE_ID } from "./workspaceId";
+import { useWorkspace } from "./WorkspaceContext";
 
 type AiBlockProps = {
   id: string;
@@ -32,13 +32,13 @@ type MemoryResponse = {
   count?: number;
 };
 
-async function fetchWorkspaceMemory(): Promise<{
+async function fetchWorkspaceMemory(workspaceId: string): Promise<{
   formatted: string;
   count: number;
 }> {
   try {
     const response = await fetch(
-      `/api/memory/${encodeURIComponent(WORKSPACE_ID)}?limit=15`,
+      `/api/memory/${encodeURIComponent(workspaceId)}?limit=15`,
     );
     if (!response.ok) return { formatted: "", count: 0 };
     const payload = (await response.json()) as MemoryResponse;
@@ -59,13 +59,14 @@ async function fetchWorkspaceMemory(): Promise<{
 }
 
 async function logAiOutput(args: {
+  workspaceId: string;
   blockId: string;
   model: AiModel;
   prompt: string;
   content: string;
 }): Promise<void> {
   try {
-    await fetch(`/api/memory/${encodeURIComponent(WORKSPACE_ID)}`, {
+    await fetch(`/api/memory/${encodeURIComponent(args.workspaceId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -115,6 +116,7 @@ function AiBlockInner({
   buildPrompt,
   onMemoryLogged,
 }: AiBlockProps) {
+  const { workspaceId } = useWorkspace();
   const model: AiModel = box.model === "groq" ? "groq" : "gemini";
   const prompt = box.prompt ?? "";
   const output = box.output ?? "";
@@ -141,7 +143,7 @@ function AiBlockInner({
 
   useEffect(() => {
     let cancelled = false;
-    void fetchWorkspaceMemory().then((mem) => {
+    void fetchWorkspaceMemory(workspaceId).then((mem) => {
       if (!cancelled) {
         memoryCache.current = mem;
         setMemoryCount(mem.count);
@@ -150,7 +152,7 @@ function AiBlockInner({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     const el = messagesRef.current;
@@ -164,7 +166,7 @@ function AiBlockInner({
     try {
       const spatialPrompt = buildPrompt(prompt);
       const cached = memoryCache.current;
-      const memoryPromise = fetchWorkspaceMemory().then((mem) => {
+      const memoryPromise = fetchWorkspaceMemory(workspaceId).then((mem) => {
         memoryCache.current = mem;
         setMemoryCount(mem.count);
         return mem;
@@ -182,6 +184,7 @@ function AiBlockInner({
       updateAi({ output: text, answeredBy, status: "idle" });
       onPropagateOutput(text);
       void logAiOutput({
+        workspaceId,
         blockId: id,
         model,
         prompt,

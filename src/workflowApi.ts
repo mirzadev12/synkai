@@ -1,5 +1,3 @@
-import { WORKSPACE_ID } from "./workspaceId";
-
 export type WorkflowStepTrace = {
   nodeId: string;
   nodeType: string;
@@ -27,6 +25,7 @@ async function readJson(response: Response): Promise<Record<string, unknown>> {
 }
 
 export async function saveWorkflowGraph(args: {
+  workspaceId: string;
   name: string;
   nodes: {
     canvasId: string;
@@ -43,7 +42,7 @@ export async function saveWorkflowGraph(args: {
   const createdRes = await fetch("/api/workflows", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ workspaceId: WORKSPACE_ID, name: args.name }),
+    body: JSON.stringify({ workspaceId: args.workspaceId, name: args.name }),
   });
   const created = await readJson(createdRes);
   if (!createdRes.ok || typeof created.id !== "string") {

@@ -23,6 +23,8 @@ import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
 import { NameGate } from "./NameGate";
 import { PresenceBar } from "./PresenceBar";
+import { clearServerSession } from "./serverSession";
+import { useWorkspace } from "./WorkspaceContext";
 import { requestAi } from "./runAiClient";
 import { upsertLinkedContext } from "./linkedContext";
 import { loadUserName } from "./userName";
@@ -59,6 +61,7 @@ const TRASH_SIZE = 56;
 type Tool = "select" | "pen" | "eraser";
 
 export function Canvas() {
+  const { code: serverCode, workspaceId } = useWorkspace();
   const boxes = useStorage((root) => root.boxes);
 
   const [tool, setTool] = useState<Tool>("select");
@@ -1004,6 +1007,7 @@ export function Canvas() {
       throw new Error("Add a Trigger and connect nodes first");
     }
     const id = await saveWorkflowGraph({
+      workspaceId,
       name,
       nodes: graph.nodes,
       edges: graph.edges,
@@ -1088,7 +1092,19 @@ export function Canvas() {
         <div className="toolbar-brand-row">
           <strong className="brand-wordmark">Synk AI</strong>
           <span className="toolbar-rule" aria-hidden />
-          <span className="workspace-tab">Workspace Alpha</span>
+          <span className="workspace-tab" title="Share this code to invite others">
+            Server {serverCode}
+          </span>
+          <button
+            type="button"
+            className="nav-ghost"
+            onClick={() => {
+              clearServerSession();
+              window.location.reload();
+            }}
+          >
+            Switch
+          </button>
         </div>
         <div className="toolbar-right">
           <PresenceBar />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { WORKSPACE_ID } from "./workspaceId";
+import { useWorkspace } from "./WorkspaceContext";
 
 export type TeamMemoryEvent = {
   id: string;
@@ -40,6 +40,7 @@ export function TeamMemoryPanel({
   onClose,
   refreshKey = 0,
 }: TeamMemoryPanelProps) {
+  const { workspaceId } = useWorkspace();
   const [events, setEvents] = useState<TeamMemoryEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export function TeamMemoryPanel({
     setError(null);
     try {
       const response = await fetch(
-        `/api/memory/${encodeURIComponent(WORKSPACE_ID)}?limit=30`,
+        `/api/memory/${encodeURIComponent(workspaceId)}?limit=30`,
       );
       const payload: unknown = await response.json();
       const record =
@@ -84,7 +85,7 @@ export function TeamMemoryPanel({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!open) return;

@@ -1405,6 +1405,13 @@ body {
   width: 100%;
 }
 
+.server-gate-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
 .note-in-range .canvas-item {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
