@@ -89,6 +89,14 @@ function modelLabel(model: AiModel) {
   return model === "groq" ? "Groq" : "Gemini";
 }
 
+/** Visual-only: hide connector-injected source blocks from the user bubble. */
+function visibleUserMessage(prompt: string): string {
+  const stripped = prompt
+    .replace(/<<<SRC:[^>]+>>>[\s\S]*?<<<END:[^>]+>>>/g, "")
+    .trim();
+  return stripped;
+}
+
 export const AiBlock = memo(AiBlockInner);
 
 function AiBlockInner({
@@ -114,8 +122,10 @@ function AiBlockInner({
   const running = box.status === "running";
   const [memoryCount, setMemoryCount] = useState(0);
   const memoryCache = useRef({ formatted: "", count: 0 });
+  const messagesRef = useRef<HTMLDivElement>(null);
   const [comingSoon, setComingSoon] = useState<string | null>(null);
   const [modelSelectKey, setModelSelectKey] = useState(0);
+  const userMessage = visibleUserMessage(prompt);
 
   const updateAi = useMutation(
     (
@@ -141,6 +151,12 @@ function AiBlockInner({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [userMessage, output, running]);
 
   async function onRun() {
     if (running) return;
@@ -262,34 +278,53 @@ function AiBlockInner({
         </button>
       </div>
 
-      <div className="ai-chat-messages">
+      <div className="ai-chat-messages" ref={messagesRef}>
         <div className="ai-context-hint">
           {nearbyNoteLabels.length > 0
             ? `Notices nearby: ${nearbyNoteLabels.join(", ")}`
             : "Listening to nearby notes and team memory"}
           {memoryCount > 0 ? ` · ${memoryCount} memories` : ""}
         </div>
-        {prompt.trim() ? (
-          <div className="ai-bubble ai-bubble-user">{prompt}</div>
-        ) : (
-          <p className="ai-chat-empty">
-            Hi — I’m your {modelLabel(model)} agent. What should we work on?
-          </p>
-        )}
+        {!userMessage && !output && !running ? (
+          <div className="ai-chat-empty">
+            <p className="ai-chat-empty-title">
+              How can I help you today?
+            </p>
+            <p>
+              I’m your {modelLabel(model)} agent on this canvas. Type below —
+              nearby notes and team memory ride along.
+            </p>
+          </div>
+        ) : null}
+        {userMessage ? (
+          <div className="ai-turn ai-turn-user">
+            <span className="ai-turn-label">You</span>
+            <div className="ai-bubble ai-bubble-user">{userMessage}</div>
+          </div>
+        ) : null}
         {running ? (
-          <div className="ai-bubble ai-bubble-ai ai-bubble-pending">
-            Thinking…
+          <div className="ai-turn ai-turn-ai">
+            <span className="ai-turn-label">{modelLabel(model)}</span>
+            <div className="ai-bubble ai-bubble-ai ai-bubble-pending">
+              <span className="ai-thinking" aria-label="Thinking">
+                <span />
+                <span />
+                <span />
+              </span>
+            </div>
           </div>
         ) : null}
         {!running && output ? (
-          <div
-            className={`ai-bubble ai-bubble-ai${box.status === "error" ? " ai-bubble-error" : ""}`}
-          >
-            {output}
+          <div className="ai-turn ai-turn-ai">
+            <span className="ai-turn-label">
+              {answeredBy || modelLabel(model)}
+            </span>
+            <div
+              className={`ai-bubble ai-bubble-ai${box.status === "error" ? " ai-bubble-error" : ""}`}
+            >
+              {output}
+            </div>
           </div>
-        ) : null}
-        {answeredBy && !running ? (
-          <div className="ai-answered">{answeredBy} agent</div>
         ) : null}
       </div>
 
@@ -300,12 +335,18 @@ function AiBlockInner({
           void onRun();
         }}
       >
-        <input
+        <textarea
           className="ai-prompt"
-          type="text"
+          rows={1}
           placeholder={`Message ${modelLabel(model)}…`}
           value={prompt}
           onChange={(event) => updateAi({ prompt: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              void onRun();
+            }
+          }}
         />
         <button
           type="submit"
