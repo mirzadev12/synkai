@@ -1548,3 +1548,116 @@ body {
   text-align: center;
   color: var(--on-surface-variant);
 }
+
+.notes-chip {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--on-surface);
+  background: var(--surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  padding: 8px 12px;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+.notes-chip .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.notes-window {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 16;
+  width: min(420px, calc(100vw - 32px));
+  height: min(480px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.notes-window-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--outline-variant);
+  font-family: var(--font-display);
+}
+
+.notes-window-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--on-surface-variant);
+}
+
+.notes-window-body {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  resize: none;
+  padding: 14px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--on-surface);
+  background: var(--surface-container-low);
+}
+
+.notes-window-body:focus {
+  outline: none;
+}
+
+.disagreement-panel {
+  width: min(640px, calc(100vw - 32px));
+  max-height: min(80vh, 640px);
+  overflow: auto;
+}
+
+.disagree-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.disagree-grid h3,
+.disagree-shared h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-family: var(--font-display);
+}
+
+.disagree-grid ul,
+.disagree-shared ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.disagree-grid section {
+  background: var(--surface-container-low);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+@media (max-width: 640px) {
+  .disagree-grid {
+    grid-template-columns: 1fr;
+  }
+}

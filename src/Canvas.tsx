@@ -16,8 +16,10 @@ import {
   type Point,
 } from "./canvasGeometry";
 import { ComparePanel } from "./ComparePanel";
+import { DisagreementPanel } from "./DisagreementPanel";
 import { ConnectionsLayer } from "./ConnectionsLayer";
 import { DocsPanel } from "./DocsPanel";
+import { NotesWindow } from "./NotesWindow";
 import { creatorFromSelf } from "./creatorMeta";
 import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
@@ -88,6 +90,12 @@ export function Canvas() {
   const [linkCursor, setLinkCursor] = useState<Point | null>(null);
   const [overTrash, setOverTrash] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [disagreeOpen, setDisagreeOpen] = useState(false);
+  const [lastCompare, setLastCompare] = useState<{
+    prompt: string;
+    left: { model: string; text: string };
+    right: { model: string; text: string };
+  } | null>(null);
   const [docsOpen, setDocsOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
@@ -1068,19 +1076,30 @@ export function Canvas() {
     for (const id of ids) {
       patchAi(id, { status: "running", output: "", answeredBy: "" });
     }
+    const collected: { model: string; text: string }[] = [];
     await Promise.all(
       ids.map(async (id, index) => {
         const model = models[index];
         try {
           const { text, answeredBy } = await requestAi(prompt, model);
           patchAi(id, { output: text, answeredBy, status: "idle" });
+          collected[index] = { model: answeredBy || model, text };
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Request failed";
           patchAi(id, { output: message, status: "error" });
+          collected[index] = { model, text: message };
         }
       }),
     );
+    if (collected[0] && collected[1]) {
+      setLastCompare({
+        prompt,
+        left: collected[0],
+        right: collected[1],
+      });
+      setDisagreeOpen(true);
+    }
   }
 
   return (
@@ -1115,6 +1134,15 @@ export function Canvas() {
           >
             Compare
           </button>
+          {lastCompare ? (
+            <button
+              type="button"
+              className={`nav-ghost${disagreeOpen ? " nav-ghost-active" : ""}`}
+              onClick={() => setDisagreeOpen(true)}
+            >
+              Disagree
+            </button>
+          ) : null}
           <button
             type="button"
             className={`nav-ghost${memoryOpen ? " nav-ghost-active" : ""}`}
@@ -1260,6 +1288,18 @@ export function Canvas() {
         onClose={() => setCompareOpen(false)}
         onCreate={(prompt, models) => void onCreateCompare(prompt, models)}
       />
+
+      {lastCompare ? (
+        <DisagreementPanel
+          open={disagreeOpen}
+          prompt={lastCompare.prompt}
+          left={lastCompare.left}
+          right={lastCompare.right}
+          onClose={() => setDisagreeOpen(false)}
+        />
+      ) : null}
+
+      <NotesWindow />
 
       <TeamMemoryPanel
         open={memoryOpen}
