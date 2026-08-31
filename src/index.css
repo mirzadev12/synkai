@@ -729,7 +729,7 @@ body {
   flex: 0 0 auto;
   min-height: 52px;
   padding: 10px 10px 10px 12px;
-  cursor: grab;
+  cursor: default;
   user-select: none;
   background: var(--surface);
   border-bottom: 1px solid var(--outline-variant);
@@ -774,7 +774,17 @@ body {
   color: var(--primary);
 }
 
-.ai-block.box-dragging .ai-chat-header {
+.ai-chat-header-drag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.ai-block.box-dragging .ai-chat-header-drag {
   cursor: grabbing;
 }
 
@@ -1553,7 +1563,7 @@ body {
   position: fixed;
   left: 16px;
   bottom: 16px;
-  z-index: 15;
+  z-index: 45;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1580,7 +1590,7 @@ body {
   position: fixed;
   left: 16px;
   bottom: 16px;
-  z-index: 16;
+  z-index: 46;
   width: min(420px, calc(100vw - 32px));
   height: min(480px, calc(100vh - 120px));
   display: flex;

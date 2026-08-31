@@ -1,18 +1,26 @@
 import { useEffect, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
 
-function notesKey(code: string) {
-  return `synkai-notes-${code}`;
+function documentKey(code: string) {
+  return `synkai-document-${code}`;
 }
 
-export function NotesWindow() {
+type DocumentPadProps = {
+  expanded: boolean;
+  onExpandedChange: (open: boolean) => void;
+};
+
+export function DocumentPad({ expanded, onExpandedChange }: DocumentPadProps) {
   const { code } = useWorkspace();
-  const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState("");
 
   useEffect(() => {
     try {
-      setText(localStorage.getItem(notesKey(code)) ?? "");
+      const next =
+        localStorage.getItem(documentKey(code)) ??
+        localStorage.getItem(`synkai-notes-${code}`) ??
+        "";
+      setText(next);
     } catch {
       setText("");
     }
@@ -21,7 +29,7 @@ export function NotesWindow() {
   function persist(next: string) {
     setText(next);
     try {
-      localStorage.setItem(notesKey(code), next);
+      localStorage.setItem(documentKey(code), next);
     } catch {
       // ignore
     }
@@ -32,33 +40,33 @@ export function NotesWindow() {
       <button
         type="button"
         className="notes-chip"
-        onClick={() => setExpanded(true)}
-        title="Open notes"
+        onClick={() => onExpandedChange(true)}
+        title="Open document"
       >
         <span className="material-symbols-outlined" aria-hidden>
           description
         </span>
-        Notes
+        Document
       </button>
     );
   }
 
   return (
-    <div className="notes-window" role="dialog" aria-label="Notes">
+    <div className="notes-window" role="dialog" aria-label="Document">
       <div className="notes-window-header">
-        <strong>Notes</strong>
-        <span className="notes-window-hint">This server only</span>
+        <strong>Document</strong>
+        <span className="notes-window-hint">Scratch pad for this server</span>
         <button
           type="button"
           className="team-memory-close"
-          onClick={() => setExpanded(false)}
+          onClick={() => onExpandedChange(false)}
         >
-          Min
+          Minimize
         </button>
       </div>
       <textarea
         className="notes-window-body"
-        placeholder="Paste or write notes for this server…"
+        placeholder="Paste or write a document here. Minimize it to keep working on the canvas."
         value={text}
         onChange={(event) => persist(event.target.value)}
       />

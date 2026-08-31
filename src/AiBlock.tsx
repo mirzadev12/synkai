@@ -230,15 +230,17 @@ function AiBlockInner({
         onPointerDown={onOutputDown}
       />
 
-      <div className="ai-chat-header" onPointerDown={onDragStart}>
-        <span className="ai-agent-avatar" aria-hidden>
-          <span className="material-symbols-outlined">{modelIcon(model)}</span>
-        </span>
-        <div className="ai-agent-meta">
-          <strong className="ai-agent-name">Agent</strong>
-          <span className={`ai-agent-status${running ? " is-busy" : ""}`}>
-            {agentStatus}
+      <div className="ai-chat-header">
+        <div className="ai-chat-header-drag" onPointerDown={onDragStart}>
+          <span className="ai-agent-avatar" aria-hidden>
+            <span className="material-symbols-outlined">{modelIcon(model)}</span>
           </span>
+          <div className="ai-agent-meta">
+            <strong className="ai-agent-name">Agent</strong>
+            <span className={`ai-agent-status${running ? " is-busy" : ""}`}>
+              {agentStatus}
+            </span>
+          </div>
         </div>
         <select
           key={`${model}-${modelSelectKey}`}
@@ -267,10 +269,14 @@ function AiBlockInner({
         <button
           type="button"
           className="ai-chat-close"
-          title="Deselect"
-          aria-label="Close chat"
-          onPointerDown={(event) => event.stopPropagation()}
+          title="Remove this AI Block"
+          aria-label="Close and remove AI Block"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
           onClick={(event) => {
+            event.preventDefault();
             event.stopPropagation();
             onClose();
           }}

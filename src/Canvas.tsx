@@ -19,7 +19,7 @@ import { ComparePanel } from "./ComparePanel";
 import { DisagreementPanel } from "./DisagreementPanel";
 import { ConnectionsLayer } from "./ConnectionsLayer";
 import { DocsPanel } from "./DocsPanel";
-import { NotesWindow } from "./NotesWindow";
+import { DocumentPad } from "./DocumentPad";
 import { creatorFromSelf } from "./creatorMeta";
 import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
@@ -97,6 +97,7 @@ export function Canvas() {
     right: { model: string; text: string };
   } | null>(null);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [documentOpen, setDocumentOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -1152,10 +1153,17 @@ export function Canvas() {
           </button>
           <button
             type="button"
+            className={`nav-ghost${documentOpen ? " nav-ghost-active" : ""}`}
+            onClick={() => setDocumentOpen((open) => !open)}
+          >
+            Document
+          </button>
+          <button
+            type="button"
             className={`nav-ghost${docsOpen ? " nav-ghost-active" : ""}`}
             onClick={() => setDocsOpen((open) => !open)}
           >
-            Docs
+            Help
           </button>
           <ThemeToggle />
           <button
@@ -1203,6 +1211,12 @@ export function Canvas() {
           onClick={() => addWorkflowNode("output")}
         />
         <DockButton icon="sticky_note_2" label="Note" onClick={() => addSticky()} />
+        <DockButton
+          icon="description"
+          label="Doc"
+          active={documentOpen}
+          onClick={() => setDocumentOpen((open) => !open)}
+        />
         <span className="dock-split" aria-hidden />
         <DockButton icon="crop_square" label="Box" onClick={() => addBox()} />
         <DockButton
@@ -1299,7 +1313,10 @@ export function Canvas() {
         />
       ) : null}
 
-      <NotesWindow />
+      <DocumentPad
+        expanded={documentOpen}
+        onExpandedChange={setDocumentOpen}
+      />
 
       <TeamMemoryPanel
         open={memoryOpen}
@@ -1400,9 +1417,10 @@ export function Canvas() {
                   selected={isSelected(id)}
                   nearbyNoteLabels={nearby.labels}
                   onSelect={(event) => selectItem(id, event.shiftKey)}
-                  onClose={() =>
-                    applySelection(selectedIds.filter((sid) => sid !== id))
-                  }
+                  onClose={() => {
+                    deleteItems([id]);
+                    applySelection(selectedIds.filter((sid) => sid !== id));
+                  }}
                   onDragStart={(event) => startDrag(event, id, box.x, box.y)}
                   onResizeStart={(event) =>
                     startResize(
