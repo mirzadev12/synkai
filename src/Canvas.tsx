@@ -744,7 +744,32 @@ export function Canvas() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [selectedConnectionId, selectedIds, deleteItems]);
 
+  // `boxes` is a fresh reference on every storage mutation — including every
+  // pointer-move frame of every drag, of any item kind. Key the nearby-context
+  // scan off only the fields it actually reads so unrelated drags don't thrash it.
+  const nearbyKey = useMemo(() => {
+    const parts: string[] = [];
+    for (const [id, box] of Object.entries(boxes)) {
+      if (box.kind !== "ai" && box.kind !== "sticky" && box.kind !== "text") {
+        continue;
+      }
+      const { width, height } = getItemSize(box);
+      const label =
+        box.kind === "ai" ? "" : (box.text ?? "").trim().slice(0, 24);
+      parts.push(
+        `${box.kind}|${id}|${box.x}|${box.y}|${width}|${height}|${label}`,
+      );
+    }
+    return parts.join(";");
+  }, [boxes]);
+
+  const nearbyCache = useRef<{
+    key: string | null;
+    value: Record<string, { ids: string[]; labels: string[] }>;
+  }>({ key: null, value: {} });
+
   const nearbyByAi = useMemo(() => {
+    if (nearbyCache.current.key === nearbyKey) return nearbyCache.current.value;
     const result: Record<string, { ids: string[]; labels: string[] }> = {};
     const notes = Object.entries(boxes).filter(
       ([, box]) =>
@@ -778,8 +803,9 @@ export function Canvas() {
       }
       result[aiId] = { ids, labels };
     }
+    nearbyCache.current = { key: nearbyKey, value: result };
     return result;
-  }, [boxes]);
+  }, [boxes, nearbyKey]);
 
   const entries = Object.entries(boxes);
 

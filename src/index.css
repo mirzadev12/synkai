@@ -1228,6 +1228,10 @@ body {
   left: -7px;
 }
 
+.port-out {
+  right: -7px;
+}
+
 .wf-block {
   width: 260px;
   height: 228px;
