@@ -83,11 +83,15 @@ async function logAiOutput(args: {
 }
 
 function modelIcon(model: AiModel) {
-  return model === "groq" ? "bolt" : "auto_awesome";
+  if (model === "groq") return "bolt";
+  if (model === "claude") return "diamond";
+  return "auto_awesome";
 }
 
 function modelLabel(model: AiModel) {
-  return model === "groq" ? "Groq" : "Gemini";
+  if (model === "groq") return "Groq";
+  if (model === "claude") return "Claude";
+  return "Gemini";
 }
 
 /** Visual-only: hide connector-injected source blocks from the user bubble. */
@@ -117,7 +121,8 @@ function AiBlockInner({
   onMemoryLogged,
 }: AiBlockProps) {
   const { workspaceId } = useWorkspace();
-  const model: AiModel = box.model === "groq" ? "groq" : "gemini";
+  const model: AiModel =
+    box.model === "groq" ? "groq" : box.model === "claude" ? "claude" : "gemini";
   const prompt = box.prompt ?? "";
   const output = box.output ?? "";
   const answeredBy = box.answeredBy ?? "";
@@ -165,17 +170,13 @@ function AiBlockInner({
     updateAi({ status: "running", output: "", answeredBy: "" });
     try {
       const spatialPrompt = buildPrompt(prompt);
-      const cached = memoryCache.current;
-      const memoryPromise = fetchWorkspaceMemory(workspaceId).then((mem) => {
+      // Use whatever memory is already cached and refresh it in the background:
+      // the model call must never wait on the /api/memory round-trip.
+      const memory = memoryCache.current;
+      void fetchWorkspaceMemory(workspaceId).then((mem) => {
         memoryCache.current = mem;
         setMemoryCount(mem.count);
-        return mem;
       });
-      const memory =
-        cached.formatted || cached.count
-          ? cached
-          : await memoryPromise;
-      void memoryPromise;
       const finalPrompt = memory.formatted
         ? `Team memory (recent workspace events):\n${memory.formatted}\n\n${spatialPrompt}`
         : spatialPrompt;
@@ -250,10 +251,10 @@ function AiBlockInner({
           onPointerDown={(event) => event.stopPropagation()}
           onChange={(event) => {
             const value = event.target.value;
-            if (value === "claude" || value === "midjourney") {
-              setComingSoon(value === "claude" ? "Claude" : "Midjourney");
-              // Remount so the controlled value stays Gemini/Groq.
-              // Leaving the native select on "claude" crashes when switching back.
+            if (value === "midjourney") {
+              setComingSoon("Midjourney");
+              // Remount so the controlled value stays on a live model.
+              // Leaving the native select on "midjourney" crashes when switching back.
               setModelSelectKey((key) => key + 1);
               return;
             }

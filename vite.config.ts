@@ -5,7 +5,7 @@ import type { Plugin } from "vite";
 import { runAi, type AiModel } from "./server/runAi.ts";
 
 function isAiModel(value: unknown): value is AiModel {
-  return value === "gemini" || value === "groq";
+  return value === "gemini" || value === "groq" || value === "claude";
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -32,6 +32,7 @@ function applyServerEnv(env: Record<string, string>) {
     "DEMO_WORKSPACE_ID",
     "GEMINI_API_KEY",
     "GROQ_API_KEY",
+    "OPENROUTER_API_KEY",
   ]) {
     if (env[key] && !process.env[key]) {
       process.env[key] = env[key];
@@ -74,7 +75,9 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
             const prompt = typeof record.prompt === "string" ? record.prompt : "";
             const model = record.model;
             if (!isAiModel(model)) {
-              sendJson(res, 400, { error: "model must be gemini or groq" });
+              sendJson(res, 400, {
+                error: "model must be gemini, groq, or claude",
+              });
               return;
             }
 

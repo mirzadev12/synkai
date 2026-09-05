@@ -1,7 +1,7 @@
 // Types for Liveblocks Storage. This file is only TypeScript types — no runtime code.
 import type { LiveMap, LiveObject } from "@liveblocks/client";
 
-export type AiModel = "gemini" | "groq";
+export type AiModel = "gemini" | "groq" | "claude";
 
 export type ItemKind =
   | "ai"

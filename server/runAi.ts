@@ -1,8 +1,8 @@
-export type AiModel = "gemini" | "groq";
+export type AiModel = "gemini" | "groq" | "claude";
 
 export type RunAiResult = {
   text: string;
-  answeredBy: "Gemini" | "Groq";
+  answeredBy: "Gemini" | "Groq" | "Claude";
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -36,16 +36,17 @@ function extractGeminiText(payload: unknown): string {
   return text;
 }
 
-function extractGroqText(payload: unknown): string {
+/** Shared by Groq and OpenRouter — both speak the OpenAI chat-completions shape. */
+function extractChatCompletionText(payload: unknown, providerName: string): string {
   const root = asRecord(payload);
   const choices = root?.choices;
   if (!Array.isArray(choices) || choices.length === 0) {
-    throw new Error("Groq returned no choices");
+    throw new Error(`${providerName} returned no choices`);
   }
   const message = asRecord(choices[0])?.message;
   const text = asRecord(message)?.content;
   if (typeof text !== "string" || !text.trim()) {
-    throw new Error("Groq returned empty text");
+    throw new Error(`${providerName} returned empty text`);
   }
   return text.trim();
 }
@@ -88,13 +89,39 @@ async function callGroq(prompt: string, apiKey: string): Promise<string> {
       typeof error === "string" ? error : `Groq request failed (${response.status})`,
     );
   }
-  return extractGroqText(payload);
+  return extractChatCompletionText(payload, "Groq");
+}
+
+async function callClaude(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "anthropic/claude-3.5-sonnet",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const payload: unknown = await response.json();
+  if (!response.ok) {
+    const error = asRecord(asRecord(payload)?.error)?.message;
+    throw new Error(
+      typeof error === "string" ? error : `Claude request failed (${response.status})`,
+    );
+  }
+  return extractChatCompletionText(payload, "Claude");
 }
 
 export async function runAi(
   prompt: string,
   model: AiModel,
-  env: { GEMINI_API_KEY?: string; GROQ_API_KEY?: string },
+  env: {
+    GEMINI_API_KEY?: string;
+    GROQ_API_KEY?: string;
+    OPENROUTER_API_KEY?: string;
+  },
 ): Promise<RunAiResult> {
   const trimmed = prompt.trim();
   if (!trimmed) {
@@ -115,6 +142,14 @@ export async function runAi(
       throw new Error("GROQ_API_KEY is missing");
     }
     return { text: await callGroq(trimmed, apiKey), answeredBy: "Groq" };
+  }
+
+  if (model === "claude") {
+    const apiKey = env.OPENROUTER_API_KEY ?? "";
+    if (!apiKey) {
+      throw new Error("OPENROUTER_API_KEY is missing");
+    }
+    return { text: await callClaude(trimmed, apiKey), answeredBy: "Claude" };
   }
 
   throw new Error("Unknown model");

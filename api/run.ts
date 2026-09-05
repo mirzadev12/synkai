@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runAi, type AiModel } from "../server/runAi.js";
 
 function isAiModel(value: unknown): value is AiModel {
-  return value === "gemini" || value === "groq";
+  return value === "gemini" || value === "groq" || value === "claude";
 }
 
 export default async function handler(
@@ -22,13 +22,14 @@ export default async function handler(
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
     const model = body.model;
     if (!isAiModel(model)) {
-      res.status(400).json({ error: "model must be gemini or groq" });
+      res.status(400).json({ error: "model must be gemini, groq, or claude" });
       return;
     }
 
     const result = await runAi(prompt, model, {
       GEMINI_API_KEY: process.env.GEMINI_API_KEY,
       GROQ_API_KEY: process.env.GROQ_API_KEY,
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
     });
     res.status(200).json(result);
   } catch (error) {

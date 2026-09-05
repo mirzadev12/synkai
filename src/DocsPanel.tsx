@@ -26,9 +26,9 @@ export function DocsPanel({ open, onClose }: DocsPanelProps) {
         </p>
         <h3>Run an AI Block</h3>
         <p>
-          Pick Gemini or Groq, type a prompt in the chat input, then Send.
-          Claude and Midjourney show a coming-soon notice. Nearby sticky notes
-          and Team Memory are added as extra context automatically.
+          Pick Gemini, Groq, or Claude, type a prompt in the chat input, then
+          Send. Midjourney shows a coming-soon notice. Nearby sticky notes and
+          Team Memory are added as extra context automatically.
         </p>
         <h3>Connect blocks</h3>
         <p>

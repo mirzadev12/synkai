@@ -3,7 +3,7 @@ import type { AiModel } from "./liveblocks.config";
 export async function requestAi(
   prompt: string,
   model: AiModel,
-): Promise<{ text: string; answeredBy: "Gemini" | "Groq" }> {
+): Promise<{ text: string; answeredBy: "Gemini" | "Groq" | "Claude" }> {
   const response = await fetch("/api/run", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -21,10 +21,14 @@ export async function requestAi(
   }
   const text = typeof record.text === "string" ? record.text : "";
   const by =
-    record.answeredBy === "Groq" || record.answeredBy === "Gemini"
+    record.answeredBy === "Groq" ||
+    record.answeredBy === "Gemini" ||
+    record.answeredBy === "Claude"
       ? record.answeredBy
       : model === "groq"
         ? "Groq"
-        : "Gemini";
+        : model === "claude"
+          ? "Claude"
+          : "Gemini";
   return { text, answeredBy: by };
 }
