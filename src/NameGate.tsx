@@ -27,7 +27,7 @@ export function NameGate({ onDone }: NameGateProps) {
           submit();
         }}
       >
-        <p className="brand-wordmark setup-brand">SYNKAI</p>
+        <p className="brand-wordmark setup-brand">Synk AI</p>
         <h2 className="name-gate-title">What’s your name?</h2>
         <p className="name-gate-copy">
           Shown to everyone in this workspace. You can change it later.

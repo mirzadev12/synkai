@@ -45,7 +45,7 @@ export function ServerGate({ onReady }: ServerGateProps) {
   return (
     <div className="name-gate" role="dialog" aria-modal="true" aria-label="Join a server">
       <div className="name-gate-card">
-        <p className="brand-wordmark setup-brand">SYNKAI</p>
+        <p className="brand-wordmark setup-brand">Synk AI</p>
         <h2 className="name-gate-title">Servers</h2>
         <p className="name-gate-copy">
           Each 6-digit code is its own canvas and team memory. Create one, or
