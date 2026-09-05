@@ -20,7 +20,7 @@ export function applyTheme(theme: ThemeName) {
   root.classList.toggle("dark", theme !== "light");
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) {
-    meta.setAttribute("content", theme === "light" ? "#faf6f4" : "#1d100e");
+    meta.setAttribute("content", theme === "light" ? "#f4f6f6" : "#101413");
   }
 }
 

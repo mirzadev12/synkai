@@ -15,6 +15,7 @@
     "@liveblocks/client": "^3.24.1",
     "@liveblocks/react": "^3.24.1",
     "@supabase/supabase-js": "^2.49.8",
+    "lucide-react": "^1.41.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
