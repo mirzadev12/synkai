@@ -1257,19 +1257,94 @@ a:focus-visible {
   gap: 2px;
 }
 
+/* Which memories a Run actually pulled in, and how relevant each was. */
+.memory-used {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.memory-used-toggle {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--secondary);
+  align-self: flex-start;
+}
+
+.memory-used-toggle:hover {
+  color: var(--primary);
+}
+
+.memory-used-glyph {
+  color: var(--primary);
+  font-size: 9px;
+}
+
+.memory-used-caret {
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.memory-used-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-left: 1px solid var(--outline-variant);
+}
+
+.memory-used-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 7px;
+  align-items: baseline;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.memory-used-score {
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-used-text {
+  color: var(--on-surface-variant);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Team Memory panel ───────────────────────────────────────────────────
+   A search surface, not just a log: the input runs semantic retrieval, so
+   rows carry a relevance score when a query is active. Scrolling is confined
+   to the list so the header and search box stay pinned. */
 .team-memory-panel {
   position: absolute;
   top: 148px;
   left: 16px;
   z-index: 40;
-  width: 256px;
-  max-height: calc(100vh - 180px);
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  width: 296px;
+  max-height: calc(100vh - 190px);
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--outline-variant);
-  border-radius: 4px;
-  box-shadow: none;
-  padding: 16px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  padding: 0;
 }
 
 .team-memory-header {
@@ -1277,59 +1352,182 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  font-family: var(--font-display);
+  padding: 12px 12px 10px 14px;
+  border-bottom: 1px solid var(--outline-variant);
   color: var(--on-surface);
+}
+
+.team-memory-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.team-memory-title-text {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.team-memory-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--secondary);
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
 }
 
 .team-memory-close {
   appearance: none;
   border: 0;
   background: transparent;
-  color: var(--on-surface-variant);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  color: var(--secondary);
   cursor: pointer;
-  padding: 4px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
 }
 
 .team-memory-close:hover {
-  color: var(--primary);
+  color: var(--on-surface);
+  background: var(--surface-container);
 }
 
-.team-memory-sub {
-  margin: 8px 0 12px;
+.team-memory-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 10px 12px 0;
+}
+
+.team-memory-search-icon {
+  position: absolute;
+  left: 9px;
+  color: var(--secondary);
+  pointer-events: none;
+}
+
+.team-memory-search-input {
+  width: 100%;
+  font: inherit;
   font-size: 12px;
-  color: var(--on-surface-variant);
-  line-height: 1.4;
+  color: var(--on-surface);
+  background: var(--surface-container-low);
+  border: 1px solid var(--outline-variant);
+  border-radius: 7px;
+  padding: 7px 26px 7px 28px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.team-memory-search-input::placeholder {
+  color: var(--secondary);
+}
+
+.team-memory-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* The browser's own search affordance clashes with the custom clear button. */
+.team-memory-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.team-memory-search-clear {
+  position: absolute;
+  right: 6px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+
+.team-memory-search-clear:hover {
+  color: var(--on-surface);
+}
+
+.team-memory-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 9px 14px 10px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--secondary);
+}
+
+.team-memory-mode-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
 }
 
 .team-memory-status,
 .team-memory-error {
-  margin: 0 0 8px;
-  font-size: 13px;
+  margin: 0 14px 10px;
+  font-size: 12px;
+  color: var(--on-surface-variant);
 }
 
 .team-memory-error {
   color: var(--error);
 }
 
+.team-memory-empty {
+  margin: 4px 14px 16px;
+  padding: 14px;
+  border: 1px dashed var(--outline-variant);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.team-memory-empty-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--on-surface);
+}
+
+.team-memory-empty-copy {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--secondary);
+}
+
 .team-memory-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 6px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .team-memory-item {
-  border: 1px solid var(--outline-variant);
-  border-radius: 4px;
-  padding: 8px 10px;
-  background: var(--surface-container-low);
+  padding: 10px 14px;
+  border-top: 1px solid var(--outline-variant);
+}
+
+.team-memory-item:first-child {
+  border-top: 0;
 }
 
 .team-memory-meta {
@@ -1337,36 +1535,47 @@ a:focus-visible {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  margin-bottom: 4px;
-  font-size: 11px;
+  margin-bottom: 5px;
+  font-size: 9.5px;
 }
 
 .team-memory-type {
-  font-weight: 600;
-  color: var(--primary);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 .team-memory-model {
-  color: var(--on-surface-variant);
-  background: var(--surface-container);
-  border: 1px solid var(--outline-variant);
-  border-radius: 4px;
-  padding: 1px 5px;
+  font-family: var(--font-mono);
+  color: var(--secondary);
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Relevance score — only rendered when a search is active. */
+.team-memory-score {
+  font-family: var(--font-mono);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .team-memory-time {
   margin-left: auto;
+  font-family: var(--font-mono);
   color: var(--secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .team-memory-preview {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--on-surface-variant);
-  line-height: 1.35;
+  line-height: 1.5;
 }
 
 .port {

@@ -7,6 +7,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "seed": "tsx src/scripts/seedAgents.ts",
+    "backfill:embeddings": "tsx src/scripts/backfillEmbeddings.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

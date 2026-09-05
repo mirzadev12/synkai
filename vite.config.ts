@@ -40,7 +40,9 @@ function applyServerEnv(env: Record<string, string>) {
   }
 }
 
-function parseMemoryPath(url: string): { workspaceId: string; limit: number } | null {
+function parseMemoryPath(
+  url: string,
+): { workspaceId: string; limit: number; query: string } | null {
   const match = /^\/api\/memory\/([^/?]+)\/?(?:\?(.*))?$/.exec(url);
   if (!match) return null;
   const workspaceId = decodeURIComponent(match[1] ?? "");
@@ -50,7 +52,7 @@ function parseMemoryPath(url: string): { workspaceId: string; limit: number } | 
     50,
     Math.max(1, Number.parseInt(params.get("limit") ?? "15", 10) || 15),
   );
-  return { workspaceId, limit };
+  return { workspaceId, limit, query: params.get("q") ?? "" };
 }
 
 function aiApiPlugin(env: Record<string, string>): Plugin {
@@ -110,6 +112,25 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
           );
 
           if (req.method === "GET") {
+            // Mirrors api/memory/[workspaceId].ts — ?q= switches to semantic.
+            if (parsed.query.trim()) {
+              const { retrieveRelevantMemory } = await import(
+                "./server/memoryRetrieval.ts"
+              );
+              const result = await retrieveRelevantMemory({
+                workspaceId: parsed.workspaceId,
+                query: parsed.query,
+                apiKey: env.GEMINI_API_KEY ?? "",
+              });
+              sendJson(res, 200, {
+                events: result.events,
+                formatted: result.formatted,
+                count: result.count,
+                mode: "semantic",
+              });
+              return;
+            }
+
             const events = await memoryService.getWorkspaceMemory(
               parsed.workspaceId,
               parsed.limit,
@@ -118,6 +139,7 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
               events,
               formatted: memoryService.formatMemoryAsContext(events),
               count: events.length,
+              mode: "recent",
             });
             return;
           }
@@ -154,7 +176,18 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
               prompt,
               content,
             );
-            sendJson(res, 201, { id });
+
+            const { embedAndStoreEvent } = await import(
+              "./server/memoryRetrieval.ts"
+            );
+            const embedded = await embedAndStoreEvent({
+              eventId: id,
+              workspaceId: parsed.workspaceId,
+              content,
+              apiKey: env.GEMINI_API_KEY ?? "",
+            });
+
+            sendJson(res, 201, { id, embedded });
             return;
           }
 

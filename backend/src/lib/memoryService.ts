@@ -267,6 +267,123 @@ export function formatMemoryAsContext(events: MemoryEvent[]): string {
 }
 
 /**
+ * A semantically matched memory. Intentionally does NOT carry model_provider:
+ * that column comes from migration 004, which is not applied on every database,
+ * so match_memory_events only returns migration 002's columns.
+ */
+export type ScoredMemoryEvent = {
+  id: string;
+  event_type: string;
+  content: string;
+  created_at: string;
+  similarity: number;
+};
+
+export type MissingEmbeddingRow = {
+  id: string;
+  workspace_id: string;
+  content: string;
+};
+
+/**
+ * Store (or replace) the embedding for one memory event.
+ * Upsert so the backfill is safe to re-run.
+ */
+export async function storeEmbedding(
+  eventId: string,
+  workspaceId: string,
+  embedding: number[],
+  model: string,
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from("memory_embeddings")
+    .upsert(
+      {
+        event_id: eventId,
+        workspace_id: workspaceId,
+        embedding,
+        model,
+      },
+      { onConflict: "event_id" },
+    );
+
+  if (error) {
+    throw new Error(`storeEmbedding failed: ${error.message}`);
+  }
+}
+
+/**
+ * Semantic search over a workspace's memory, via the match_memory_events RPC
+ * (supabase-js cannot express `order by embedding <=> $1` directly).
+ * Returns newest-irrelevant-free results ordered by similarity, highest first.
+ */
+export async function searchMemoryEvents(
+  workspaceId: string,
+  queryEmbedding: number[],
+  matchCount: number,
+  minSimilarity: number,
+): Promise<ScoredMemoryEvent[]> {
+  const { data, error } = await getSupabase().rpc("match_memory_events", {
+    p_workspace_id: workspaceId,
+    p_query_embedding: queryEmbedding,
+    p_match_count: matchCount,
+    p_min_similarity: minSimilarity,
+  });
+
+  if (error) {
+    throw new Error(`searchMemoryEvents failed: ${error.message}`);
+  }
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    id: String(row.id ?? ""),
+    event_type: String(row.event_type ?? "event"),
+    content: String(row.content ?? ""),
+    created_at: String(row.created_at ?? ""),
+    similarity: Number(row.similarity ?? 0),
+  }));
+}
+
+/**
+ * Events that still have no embedding. Backed by the
+ * memory_events_missing_embeddings view from migration 006.
+ */
+export async function listEventsMissingEmbeddings(
+  limit: number,
+): Promise<MissingEmbeddingRow[]> {
+  const { data, error } = await getSupabase()
+    .from("memory_events_missing_embeddings")
+    .select("id, workspace_id, content")
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`listEventsMissingEmbeddings failed: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    workspace_id: String(row.workspace_id),
+    content: String(row.content ?? ""),
+  }));
+}
+
+/**
+ * Prompt-injection text for semantically matched memories, with scores so the
+ * model knows which are strongest. Ordered weakest → strongest so the most
+ * relevant memory sits closest to the user's prompt.
+ */
+export function formatMatchesAsContext(events: ScoredMemoryEvent[]): string {
+  if (events.length === 0) return "";
+  return [...events]
+    .reverse()
+    .map(
+      (event) =>
+        `[${event.event_type}, relevance ${event.similarity.toFixed(2)}]: ${event.content}`,
+    )
+    .join("\n");
+}
+
+/**
  * Lightweight summary for a "team memory" UI indicator.
  */
 export async function getWorkspaceMemorySummary(

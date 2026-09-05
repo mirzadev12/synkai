@@ -94,9 +94,9 @@ same map in `src/Canvas.tsx`.
   full rescan every pointer-move frame.
 - Team memory: every successful Run POSTs to `/api/memory/:workspaceId`
   (`memory_events` table — `workspace_id, block_id, event_type, model_provider, prompt,
-  content, created_at, metadata`); each Run also uses whatever recent-memory is already
-  cached (refreshed in the background, never blocks the model call) and prepends it to
-  the prompt. `TeamMemoryPanel.tsx` is the read-only sidebar (newest first).
+  content, created_at, metadata`). Retrieval is **semantic, not recency-based** — see
+  "Semantic memory" below. `TeamMemoryPanel.tsx` is the read-only sidebar (newest first)
+  and still uses the plain recent list.
 - Block-to-block handoff: dragging from a block's output port to another's input port
   creates a `connection` object; on a successful Run, `feedConnectedPrompts` appends the
   source's output into **every** connected target's prompt via `upsertLinkedContext`
@@ -106,6 +106,58 @@ same map in `src/Canvas.tsx`.
 - Compare mode: `ComparePanel.tsx` fires one prompt at any 2+ of Gemini/Groq/Claude
   simultaneously via `addCompareBlocks`, laying out one AI Block per model;
   `DisagreementPanel.tsx` then surfaces where the answers diverge.
+
+## Semantic memory (the differentiator)
+
+AI Blocks retrieve memories **by relevance to the prompt**, not by recency.
+
+**Cost: zero.** `gemini-embedding-001` is free of charge on the Gemini free tier and
+reuses the existing `GEMINI_API_KEY` — no new environment variable. pgvector is included
+on Supabase's free plan.
+
+**Flow**
+1. A Run finishes → `POST /api/memory/:workspaceId` saves the event, *then* embeds it
+   (`RETRIEVAL_DOCUMENT`) into `memory_embeddings`. Embedding failure never loses the
+   event — the row is simply left unembedded for the backfill to pick up.
+2. The next Run embeds its prompt (`RETRIEVAL_QUERY`) and calls the
+   `match_memory_events` RPC, which ranks by cosine distance within that workspace.
+3. Matches above the threshold are prepended to the prompt, weakest→strongest so the
+   most relevant sits nearest the question. Spatial nearby-note context is applied
+   independently and still works alongside this.
+
+**Files**
+```
+server/embed.ts              Gemini embeddings, 768 dims, task types
+server/memoryRetrieval.ts    Shared by api/ and vite.config.ts — TUNING CONSTANTS LIVE HERE
+supabase/migrations/006_*    memory_embeddings table + match_memory_events RPC
+backend/src/scripts/backfillEmbeddings.ts   Resumable backfill, 429-aware
+```
+
+**Tuning** (`server/memoryRetrieval.ts`): `MEMORY_MATCH_COUNT = 4`,
+`MEMORY_MIN_SIMILARITY = 0.65`.
+
+The threshold is measured, not guessed. `gemini-embedding-001` compresses cosine scores
+into a narrow band — *unrelated* text still scores ~0.50-0.55, so an intuitive-sounding
+floor like 0.55 injects pure noise (a query with no relevant memory still returned two
+matches; a vague query returned all six). 0.65 returns exactly the right memories and
+correctly returns *nothing* when nothing is relevant. Lower toward 0.62 if relevant
+memories get dropped; raise toward 0.70 if noise creeps in.
+
+**Design notes worth keeping**
+- Embeddings live in a **side table**, not a column on `memory_events`, because
+  `getWorkspaceMemory` does `select("*")` — a vector column would drag ~3KB/row into the
+  Team Memory sidebar, which never uses it.
+- `match_memory_events` deliberately selects **only migration 002 columns**. Migration
+  004's columns are not present on every database, and depending on them made the
+  migration fail outright.
+- **No vector index yet.** Below ~10k rows a sequential scan is faster than an HNSW build
+  is affordable on a 500MB-RAM shared instance. The commented-out index is in 006.
+- Retrieval necessarily blocks the model call (one embed + one vector query, ~200-400ms):
+  relevance depends on the prompt, so it cannot be prefetched the way the old recent-list
+  was. This partially reverses the earlier latency fix, by design.
+
+**Free-tier ceilings**: Supabase 500MB (~100k embedded rows at 768 dims) and **projects
+pause after 7 days of inactivity** — that pause, not storage, is what will bite first.
 
 ## Known gaps / not implemented
 

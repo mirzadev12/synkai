@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import * as memoryService from "../../backend/src/lib/memoryService.js";
+import {
+  embedAndStoreEvent,
+  retrieveRelevantMemory,
+} from "../../server/memoryRetrieval.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const workspaceId = req.query.workspaceId;
@@ -11,6 +15,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === "GET") {
+      // ?q=<text> switches from "most recent" to semantic relevance.
+      // Without it the endpoint behaves exactly as before, so the Team Memory
+      // sidebar keeps working unchanged.
+      const qRaw = req.query.q;
+      const query = Array.isArray(qRaw) ? qRaw[0] : qRaw;
+
+      if (typeof query === "string" && query.trim()) {
+        const result = await retrieveRelevantMemory({
+          workspaceId: id,
+          query,
+          apiKey: process.env.GEMINI_API_KEY ?? "",
+        });
+        res.status(200).json({
+          events: result.events,
+          formatted: result.formatted,
+          count: result.count,
+          mode: "semantic",
+        });
+        return;
+      }
+
       const limitRaw = req.query.limit;
       const limitStr = Array.isArray(limitRaw) ? limitRaw[0] : limitRaw;
       const limit = Math.min(
@@ -22,6 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         events,
         formatted: memoryService.formatMemoryAsContext(events),
         count: events.length,
+        mode: "recent",
       });
       return;
     }
@@ -54,7 +80,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         prompt,
         content,
       );
-      res.status(201).json({ id: eventId });
+
+      // Embed AFTER the event is safely stored. This never throws, so a rate
+      // limit or an unmigrated database costs a vector, never a memory — the
+      // row is picked up later by the backfill script.
+      //
+      // Not awaited by the browser for UI purposes: AiBlock fires this POST
+      // with `void logAiOutput(...)` once the model output is already rendered.
+      const embedded = await embedAndStoreEvent({
+        eventId,
+        workspaceId: id,
+        content,
+        apiKey: process.env.GEMINI_API_KEY ?? "",
+      });
+
+      res.status(201).json({ id: eventId, embedded });
       return;
     }
 

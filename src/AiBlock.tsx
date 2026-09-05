@@ -32,6 +32,54 @@ type MemoryResponse = {
   count?: number;
 };
 
+/** One semantically matched memory, with its cosine similarity 0..1. */
+export type UsedMemory = {
+  id: string;
+  event_type: string;
+  content: string;
+  similarity: number;
+};
+
+/**
+ * Memories relevant to `query`, ranked by similarity — as opposed to
+ * fetchWorkspaceMemory below, which is the plain "most recent" list still used
+ * for the count badge and the Team Memory sidebar.
+ */
+async function fetchRelevantMemory(
+  workspaceId: string,
+  query: string,
+): Promise<{ formatted: string; events: UsedMemory[] }> {
+  try {
+    const response = await fetch(
+      `/api/memory/${encodeURIComponent(workspaceId)}?q=${encodeURIComponent(query)}`,
+    );
+    if (!response.ok) return { formatted: "", events: [] };
+    const payload = (await response.json()) as MemoryResponse;
+    const events = Array.isArray(payload.events)
+      ? payload.events.map((row) => {
+          const r =
+            row && typeof row === "object" && !Array.isArray(row)
+              ? (row as Record<string, unknown>)
+              : {};
+          return {
+            id: String(r.id ?? ""),
+            event_type: String(r.event_type ?? "event"),
+            content: String(r.content ?? ""),
+            similarity: Number(r.similarity ?? 0),
+          };
+        })
+      : [];
+    return {
+      formatted:
+        typeof payload.formatted === "string" ? payload.formatted : "",
+      events,
+    };
+  } catch {
+    // Retrieval is never allowed to break a Run — fall back to no memory.
+    return { formatted: "", events: [] };
+  }
+}
+
 async function fetchWorkspaceMemory(workspaceId: string): Promise<{
   formatted: string;
   count: number;
@@ -128,7 +176,8 @@ function AiBlockInner({
   const answeredBy = box.answeredBy ?? "";
   const running = box.status === "running";
   const [memoryCount, setMemoryCount] = useState(0);
-  const memoryCache = useRef({ formatted: "", count: 0 });
+  const [usedMemories, setUsedMemories] = useState<UsedMemory[]>([]);
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const [comingSoon, setComingSoon] = useState<string | null>(null);
   const [modelSelectKey, setModelSelectKey] = useState(0);
@@ -150,7 +199,6 @@ function AiBlockInner({
     let cancelled = false;
     void fetchWorkspaceMemory(workspaceId).then((mem) => {
       if (!cancelled) {
-        memoryCache.current = mem;
         setMemoryCount(mem.count);
       }
     });
@@ -170,15 +218,16 @@ function AiBlockInner({
     updateAi({ status: "running", output: "", answeredBy: "" });
     try {
       const spatialPrompt = buildPrompt(prompt);
-      // Use whatever memory is already cached and refresh it in the background:
-      // the model call must never wait on the /api/memory round-trip.
-      const memory = memoryCache.current;
-      void fetchWorkspaceMemory(workspaceId).then((mem) => {
-        memoryCache.current = mem;
-        setMemoryCount(mem.count);
-      });
+
+      // Semantic retrieval has to happen here, not on mount: relevance is
+      // relative to THIS prompt, so it can't be prefetched or cached the way
+      // the old "most recent N" list was. That costs one embed + one vector
+      // query before the model call — the unavoidable price of relevance.
+      // Spatial nearby-note context is applied independently, above.
+      const memory = await fetchRelevantMemory(workspaceId, prompt);
+      setUsedMemories(memory.events);
       const finalPrompt = memory.formatted
-        ? `Team memory (recent workspace events):\n${memory.formatted}\n\n${spatialPrompt}`
+        ? `Relevant team memory (most relevant last):\n${memory.formatted}\n\n${spatialPrompt}`
         : spatialPrompt;
 
       const { text, answeredBy } = await requestAi(finalPrompt, model);
@@ -322,6 +371,38 @@ function AiBlockInner({
                 <span />
               </span>
             </div>
+          </div>
+        ) : null}
+        {!running && usedMemories.length > 0 ? (
+          <div className="memory-used">
+            <button
+              type="button"
+              className="memory-used-toggle"
+              aria-expanded={memoriesOpen}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => setMemoriesOpen((open) => !open)}
+            >
+              <span className="memory-used-glyph" aria-hidden>
+                ◈
+              </span>
+              used {usedMemories.length}{" "}
+              {usedMemories.length === 1 ? "memory" : "memories"}
+              <span className="memory-used-caret" aria-hidden>
+                {memoriesOpen ? "▾" : "▸"}
+              </span>
+            </button>
+            {memoriesOpen ? (
+              <ul className="memory-used-list">
+                {usedMemories.map((memory) => (
+                  <li key={memory.id} className="memory-used-item">
+                    <span className="memory-used-score">
+                      {memory.similarity.toFixed(2)}
+                    </span>
+                    <span className="memory-used-text">{memory.content}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
         {!running && output ? (
