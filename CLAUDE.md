@@ -160,8 +160,27 @@ stale rows.
 | Live presence count | working | `PresenceBar.tsx`, Liveblocks presence API |
 | Claude activated via OpenRouter (replacing "coming soon") | working (needs key) | Implemented in `server/runAi.ts` + `api/run.ts` + `vite.config.ts` dev middleware; **`OPENROUTER_API_KEY` still needs to be added to Vercel** (and to `.env.local` for local use) — not invented here |
 
-## Pending visual design pass
+## Visual design pass
 
-A separate, styling-only design pass (tokens, Tailwind/shadcn, per-component restyle)
-was requested to run after the above — see conversation history for the full spec.
-Do not commit/deploy that work until the user has reviewed it locally.
+Styling-only pass, run after the functional work above. Direction chosen by the user:
+two themes off the existing toggle — light is deep teal `#0f6156` on cool off-white,
+dark is the same hue lifted to `#3fb8a2` on near-black. Typography is the IBM Plex
+superfamily. Tailwind and shadcn/ui were **deliberately skipped** (the user chose this):
+Tailwind's utilities land in `@layer utilities` and lose to this stylesheet's unlayered
+semantic classes, so adopting it would have meant wrapping all ~1650 lines in a cascade
+layer for no styling benefit; shadcn additionally requires replacing working controls
+with Radix primitives, which the styling-only rule forbids.
+
+| Design item | Status | Notes |
+|---|---|---|
+| Global colour/type/space/radius tokens | done | `src/index.css`; legacy Material-ish names kept as aliases so old rules re-theme |
+| Two themes on the existing toggle | done | `:root` = dark, `html.light` overrides; toggle logic untouched |
+| Canvas dot-grid background | done | Pre-existing, retained and re-tokenised |
+| AI Block as bordered card | done | |
+| Monospace AI Block prompt/output | **not done** | `--font-mono` is defined but only applied to `.setup pre/code`; the AI Block still renders sans |
+| Per-model accent tint (Gemini/Groq/Claude) | **not done** | No per-model colour anywhere |
+| lucide-react icon swap | **not done** | Package installed but unused; every icon is still a Material Symbols ligature |
+| Panel open/close transitions (~150–200ms) | **not done** | Docs / Team Memory / Document panels still snap; no Framer Motion |
+| Custom empty + loading microcopy | **not done** | Still "Connecting…", "Loading…", "No events yet. Run an AI Block." |
+| Expressive connectors (pulse on handoff) | **not done** | Lines are already curved (`curvedPath`); no animation |
+| Favicon de-gradiented | done | Flattened to the accent with a light/dark swap |
