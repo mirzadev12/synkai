@@ -1,6 +1,8 @@
 import { useMutation } from "@liveblocks/react/suspense";
 import { memo, useEffect, useRef, useState } from "react";
-import { ChevronRight, Gem, Sparkles, X, Zap } from "lucide-react";
+import { ChevronRight, Gem, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
+import { AiOutput } from "./AiOutput";
+import { hasCode } from "./codeBlocks";
 import {
   AI_HEIGHT,
   AI_WIDTH,
@@ -23,6 +25,8 @@ type AiBlockProps = {
   onOutputDown: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onInputUp: (event: React.PointerEvent<HTMLButtonElement>) => void;
   onPropagateOutput: (output: string) => void;
+  /** Spawn a linked review block for this block's code, using the given model. */
+  onRequestReview?: (model: AiModel) => void;
   buildPrompt: (userPrompt: string) => string;
   onMemoryLogged?: () => void;
 };
@@ -107,7 +111,7 @@ async function fetchWorkspaceMemory(workspaceId: string): Promise<{
   }
 }
 
-async function logAiOutput(args: {
+export async function logAiOutput(args: {
   workspaceId: string;
   blockId: string;
   model: AiModel;
@@ -136,6 +140,10 @@ function ModelIcon({ model }: { model: AiModel }) {
   if (model === "claude") return <Gem size={15} strokeWidth={1.8} aria-hidden />;
   return <Sparkles size={15} strokeWidth={1.8} aria-hidden />;
 }
+
+/** Any live model can review any other's code — reviewing with a different
+ *  model than generated it is the point. */
+const REVIEW_MODELS: AiModel[] = ["gemini", "groq", "claude"];
 
 function modelLabel(model: AiModel) {
   if (model === "groq") return "Groq";
@@ -166,6 +174,7 @@ function AiBlockInner({
   onOutputDown,
   onInputUp,
   onPropagateOutput,
+  onRequestReview,
   buildPrompt,
   onMemoryLogged,
 }: AiBlockProps) {
@@ -179,6 +188,7 @@ function AiBlockInner({
   const [memoryCount, setMemoryCount] = useState(0);
   const [usedMemories, setUsedMemories] = useState<UsedMemory[]>([]);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
   const [comingSoon, setComingSoon] = useState<string | null>(null);
   const [modelSelectKey, setModelSelectKey] = useState(0);
@@ -410,8 +420,48 @@ function AiBlockInner({
             <div
               className={`ai-bubble ai-bubble-ai${box.status === "error" ? " ai-bubble-error" : ""}`}
             >
-              {output}
+              {box.status === "error" ? output : <AiOutput text={output} />}
             </div>
+
+            {/* Offered only when the output actually contains fenced code.
+                Review is analysis only — nothing here executes anything. */}
+            {box.status !== "error" && hasCode(output) ? (
+              <div className="review-bar">
+                <button
+                  type="button"
+                  className="review-trigger"
+                  aria-expanded={reviewOpen}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => setReviewOpen((open) => !open)}
+                >
+                  <ShieldCheck size={12} strokeWidth={1.9} aria-hidden />
+                  Review this
+                </button>
+                {reviewOpen ? (
+                  <div className="review-menu" role="menu">
+                    <span className="review-menu-hint">Review with</span>
+                    {REVIEW_MODELS.map((candidate) => (
+                      <button
+                        key={candidate}
+                        type="button"
+                        role="menuitem"
+                        className="review-menu-item"
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onClick={() => {
+                          setReviewOpen(false);
+                          onRequestReview?.(candidate);
+                        }}
+                      >
+                        {modelLabel(candidate)}
+                        {candidate === model ? (
+                          <span className="review-menu-same">same</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

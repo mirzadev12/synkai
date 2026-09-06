@@ -195,6 +195,39 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
         })().catch(next);
       });
 
+      server.middlewares.use("/api/files", (req, res, next) => {
+        void (async () => {
+          if (req.method !== "POST") {
+            sendJson(res, 405, { error: "Method not allowed" });
+            return;
+          }
+          const body = await readJsonBody(req);
+          const record =
+            body && typeof body === "object" && !Array.isArray(body)
+              ? (body as Record<string, unknown>)
+              : {};
+          const { createUploadTicket, MAX_FILE_BYTES } = await import(
+            "./backend/src/lib/fileStorage.ts"
+          );
+          const workspaceId =
+            typeof record.workspaceId === "string" ? record.workspaceId : "";
+          const fileName =
+            typeof record.fileName === "string" ? record.fileName : "";
+          const size = typeof record.size === "number" ? record.size : 0;
+          if (!workspaceId || !fileName) {
+            sendJson(res, 400, { error: "workspaceId and fileName are required" });
+            return;
+          }
+          if (size > MAX_FILE_BYTES) {
+            sendJson(res, 413, {
+              error: `File is too large (max ${Math.round(MAX_FILE_BYTES / 1024 / 1024)}MB)`,
+            });
+            return;
+          }
+          sendJson(res, 200, await createUploadTicket({ workspaceId, fileName }));
+        })().catch(next);
+      });
+
       server.middlewares.use("/api/rooms", (req, res, next) => {
         void (async () => {
           if (req.method !== "POST") {

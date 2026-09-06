@@ -1,6 +1,7 @@
 {
   "rewrites": [
     { "source": "/api/rooms", "destination": "/api/orchestrate" },
+    { "source": "/api/files", "destination": "/api/orchestrate" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

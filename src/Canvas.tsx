@@ -2,6 +2,7 @@ import { LiveObject } from "@liveblocks/client";
 import {
   ArrowRightFromLine,
   Brain,
+  ChevronDown,
   Circle,
   Eraser,
   FileText,
@@ -23,9 +24,10 @@ import {
 import {
   useMutation,
   useStorage,
+  useUpdateMyPresence,
 } from "@liveblocks/react/suspense";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AiBlock } from "./AiBlock";
+import { AiBlock, logAiOutput } from "./AiBlock";
 import { ConditionBlock } from "./ConditionBlock";
 import { OutputBlock } from "./OutputBlock";
 import { TransformBlock } from "./TransformBlock";
@@ -38,9 +40,13 @@ import {
 } from "./canvasGeometry";
 import { ComparePanel } from "./ComparePanel";
 import { DisagreementPanel } from "./DisagreementPanel";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ConnectionsLayer } from "./ConnectionsLayer";
+import { Cursors } from "./Cursors";
 import { DocsPanel } from "./DocsPanel";
-import { DocumentPad } from "./DocumentPad";
+import { DocBlock } from "./DocBlock";
+import { FileBlock } from "./FileBlock";
+import { uploadFile } from "./uploadFile";
 import { creatorFromSelf } from "./creatorMeta";
 import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
@@ -50,11 +56,20 @@ import { clearServerSession } from "./serverSession";
 import { useWorkspace } from "./WorkspaceContext";
 import { requestAi } from "./runAiClient";
 import { upsertLinkedContext } from "./linkedContext";
+import { buildReviewPrompt, extractCode } from "./codeBlocks";
 import { loadUserName } from "./userName";
 import {
   AI_HEIGHT,
   AI_WIDTH,
   CONTEXT_RANGE,
+  WORLD_HEIGHT,
+  WORLD_WIDTH,
+  DOC_HEIGHT,
+  DOC_WIDTH,
+  FILE_HEIGHT,
+  FILE_WIDTH,
+  docPlainText,
+  docTitle,
   getItemSize,
   withinRange,
   type AiModel,
@@ -79,13 +94,13 @@ import "./liveblocks.config";
 const PEN_COLORS = ["#1c1917", "#dc2626", "#2563eb"] as const;
 const PEN_WIDTHS = [2, 4, 8] as const;
 const ERASER_RADIUS = 18;
-const TRASH_SIZE = 56;
 
 type Tool = "select" | "pen" | "eraser";
 
 export function Canvas() {
   const { code: serverCode, workspaceId } = useWorkspace();
   const boxes = useStorage((root) => root.boxes);
+  const updateMyPresence = useUpdateMyPresence();
 
   const [tool, setTool] = useState<Tool>("select");
   const [penColor, setPenColor] = useState<(typeof PEN_COLORS)[number]>(
@@ -118,7 +133,12 @@ export function Canvas() {
     right: { model: string; text: string };
   } | null>(null);
   const [docsOpen, setDocsOpen] = useState(false);
-  const [documentOpen, setDocumentOpen] = useState(false);
+  // Which Doc block is expanded, if any. Deliberately LOCAL state: one person
+  // opening a document must not force it open on everyone else's screen.
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
+  // Which dock toolbox is open; only one at a time.
+  const [openToolbox, setOpenToolbox] = useState<string | null>(null);
+  const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -137,6 +157,8 @@ export function Canvas() {
   const drawPoints = useRef<Point[]>([]);
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const anyFileInputRef = useRef<HTMLInputElement>(null);
+  const trashRef = useRef<HTMLDivElement>(null);
   const linkFromRef = useRef<string | null>(null);
   const linkBranchRef = useRef<ConnectionBranch>("default");
 
@@ -343,6 +365,57 @@ export function Canvas() {
       }),
     );
     return id;
+  }, []);
+
+  const addDoc = useMutation(({ storage, self }) => {
+    const id = crypto.randomUUID();
+    const count = storage.get("boxes").size + 1;
+    storage.get("boxes").set(
+      id,
+      new LiveObject({
+        x: 96 + ((count * 22) % 230),
+        y: 96 + ((count * 22) % 150),
+        // Doc content is HTML (TipTap). Empty means the block shows its
+        // "Untitled document" placeholder until someone writes in it.
+        text: "",
+        kind: "doc",
+        width: DOC_WIDTH,
+        height: DOC_HEIGHT,
+        ...creatorFromSelf(self),
+      }),
+    );
+    return id;
+  }, []);
+
+  const addFilePlaceholder = useMutation(
+    ({ storage, self }, file: { name: string; size: number; type: string }) => {
+      const id = crypto.randomUUID();
+      const count = storage.get("boxes").size + 1;
+      storage.get("boxes").set(
+        id,
+        new LiveObject({
+          x: 110 + ((count * 22) % 210),
+          y: 110 + ((count * 22) % 140),
+          text: file.name,
+          kind: "file",
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          // src is filled in when the upload finishes; until then the block
+          // renders an "Uploading…" state for everyone in the room.
+          src: "",
+          width: FILE_WIDTH,
+          height: FILE_HEIGHT,
+          ...creatorFromSelf(self),
+        }),
+      );
+      return id;
+    },
+    [],
+  );
+
+  const setFileUrl = useMutation(({ storage }, id: string, src: string) => {
+    storage.get("boxes").get(id)?.update({ src });
   }, []);
 
   const addImageFromSrc = useMutation(({ storage, self }, src: string) => {
@@ -560,24 +633,37 @@ export function Canvas() {
     [],
   );
 
+  /**
+   * Screen coordinates → WORLD coordinates.
+   *
+   * The canvas scrolls its own view of a fixed-size shared world, so the
+   * scroll offset has to be added back in. Everything positioned in the world
+   * — items, strokes, connections, cursors, the marquee — uses this.
+   */
   function canvasPoint(event: { clientX: number; clientY: number }): Point | null {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
-    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    return {
+      x: event.clientX - rect.left + canvas.scrollLeft,
+      y: event.clientY - rect.top + canvas.scrollTop,
+    };
   }
 
-  function isOverTrash(point: Point): boolean {
-    const canvas = canvasRef.current;
-    if (!canvas) return false;
-    const rect = canvas.getBoundingClientRect();
-    const left = rect.width - TRASH_SIZE - 16;
-    const top = rect.height - TRASH_SIZE - 16;
+  /**
+   * The trash bin is screen-fixed chrome, not world content, so it is hit-tested
+   * against its real on-screen box using raw client coordinates. Converting the
+   * pointer to world space here would make the bin appear to drift as you scroll.
+   */
+  function isOverTrash(event: { clientX: number; clientY: number }): boolean {
+    const el = trashRef.current;
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
     return (
-      point.x >= left &&
-      point.x <= left + TRASH_SIZE &&
-      point.y >= top &&
-      point.y <= top + TRASH_SIZE
+      event.clientX >= r.left &&
+      event.clientX <= r.right &&
+      event.clientY >= r.top &&
+      event.clientY <= r.bottom
     );
   }
 
@@ -585,13 +671,8 @@ export function Canvas() {
     if (!draggingId) return;
 
     function onMove(event: PointerEvent) {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const rect = canvas.getBoundingClientRect();
-      const point = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      };
+      const point = canvasPoint(event);
+      if (!point) return;
       const dx = point.x - pointerOriginRef.current.x;
       const dy = point.y - pointerOriginRef.current.y;
       const group = dragGroupRef.current;
@@ -603,8 +684,11 @@ export function Canvas() {
           continue;
         }
         const { width, height } = getItemSize(item);
-        const maxX = Math.max(0, rect.width - width);
-        const maxY = Math.max(0, rect.height - height);
+        // Clamp to the shared WORLD, not to this viewer's window — otherwise
+        // the reachable area would differ per screen size, which is the bug
+        // this whole change exists to fix.
+        const maxX = Math.max(0, WORLD_WIDTH - width);
+        const maxY = Math.max(0, WORLD_HEIGHT - height);
         updates.push({
           id: gid,
           x: Math.min(Math.max(0, origin.x + dx), maxX),
@@ -616,22 +700,14 @@ export function Canvas() {
       } else if (updates.length > 1) {
         moveBoxes(updates);
       }
-      setOverTrash(isOverTrash(point));
+      setOverTrash(isOverTrash(event));
     }
 
     function onUp(event: PointerEvent) {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const point = {
-          x: event.clientX - rect.left,
-          y: event.clientY - rect.top,
-        };
-        if (isOverTrash(point)) {
-          const ids = dragGroupRef.current;
-          deleteItems(ids);
-          clearSelection();
-        }
+      if (isOverTrash(event)) {
+        const ids = dragGroupRef.current;
+        deleteItems(ids);
+        clearSelection();
       }
       setDraggingId(null);
       setOverTrash(false);
@@ -771,7 +847,12 @@ export function Canvas() {
   const nearbyKey = useMemo(() => {
     const parts: string[] = [];
     for (const [id, box] of Object.entries(boxes)) {
-      if (box.kind !== "ai" && box.kind !== "sticky" && box.kind !== "text") {
+      if (
+        box.kind !== "ai" &&
+        box.kind !== "sticky" &&
+        box.kind !== "text" &&
+        box.kind !== "doc"
+      ) {
         continue;
       }
       const { width, height } = getItemSize(box);
@@ -792,11 +873,16 @@ export function Canvas() {
   const nearbyByAi = useMemo(() => {
     if (nearbyCache.current.key === nearbyKey) return nearbyCache.current.value;
     const result: Record<string, { ids: string[]; labels: string[] }> = {};
-    const notes = Object.entries(boxes).filter(
-      ([, box]) =>
-        (box.kind === "sticky" || box.kind === "text") &&
-        (box.text ?? "").trim().length > 0,
-    );
+    // Doc blocks are context sources too. Their text is HTML, so it is read
+    // through docPlainText — both here and in buildPromptFor — or the model
+    // would receive markup instead of prose.
+    const notes = Object.entries(boxes).filter(([, box]) => {
+      if (box.kind === "sticky" || box.kind === "text") {
+        return (box.text ?? "").trim().length > 0;
+      }
+      if (box.kind === "doc") return docPlainText(box.text).length > 0;
+      return false;
+    });
     for (const [aiId, ai] of Object.entries(boxes)) {
       if (ai.kind !== "ai") continue;
       const size = getItemSize(ai);
@@ -818,8 +904,14 @@ export function Canvas() {
           )
         ) {
           ids.push(noteId);
-          const snippet = (note.text ?? "").trim().slice(0, 24);
-          labels.push(note.kind === "sticky" ? `Sticky “${snippet}”` : `Text “${snippet}”`);
+          if (note.kind === "doc") {
+            labels.push(`Doc “${docTitle(note.text, note.docName)}”`);
+          } else {
+            const snippet = (note.text ?? "").trim().slice(0, 24);
+            labels.push(
+              note.kind === "sticky" ? `Sticky “${snippet}”` : `Text “${snippet}”`,
+            );
+          }
         }
       }
       result[aiId] = { ids, labels };
@@ -916,6 +1008,17 @@ export function Canvas() {
     setResizingId(id);
   }
 
+  /**
+   * Broadcast this pointer so other people can see it. updateMyPresence is a
+   * stable callback that does NOT subscribe to presence, so this never
+   * re-renders Canvas — only the Cursors component, which does subscribe.
+   * Network rate is bounded by LiveblocksProvider's `throttle` setting.
+   */
+  function onCanvasPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const point = canvasPoint(event);
+    if (point) updateMyPresence({ cursor: point });
+  }
+
   function onCanvasPointerDown(event: React.PointerEvent<HTMLDivElement>) {
     if (event.target !== canvasRef.current) return;
     setSelectedConnectionId(null);
@@ -1010,6 +1113,26 @@ export function Canvas() {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
+  }
+
+  async function onPickFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const id = addFilePlaceholder({
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    });
+    try {
+      const { url } = await uploadFile(workspaceId, file);
+      setFileUrl(id, url);
+    } catch (error) {
+      deleteItems([id]);
+      window.alert(
+        error instanceof Error ? error.message : "Upload failed",
+      );
+    }
   }
 
   function onPickImage(event: React.ChangeEvent<HTMLInputElement>) {
@@ -1110,12 +1233,65 @@ export function Canvas() {
   function buildPromptFor(aiId: string, userPrompt: string): string {
     const nearby = nearbyByAi[aiId];
     if (!nearby || nearby.ids.length === 0) return userPrompt;
-    const chunks = nearby.ids.map((noteId) => {
-      const note = boxes[noteId];
-      return (note?.text ?? "").trim();
-    }).filter(Boolean);
+    const chunks = nearby.ids
+      .map((noteId) => {
+        const note = boxes[noteId];
+        // Docs store HTML; everything else stores plain text.
+        return note?.kind === "doc"
+          ? docPlainText(note.text)
+          : (note?.text ?? "").trim();
+      })
+      .filter(Boolean);
     if (chunks.length === 0) return userPrompt;
     return `Context from nearby notes on the canvas:\n${chunks.map((c) => `- ${c}`).join("\n")}\n\nUser prompt:\n${userPrompt}`;
+  }
+
+  /**
+   * Review the code in `sourceId`'s output with `model`.
+   *
+   * The review lands in its OWN block, connected to the source, so the original
+   * output is never touched or overwritten. Uses the existing run and memory
+   * paths rather than adding new ones. Analysis only — no code is executed
+   * anywhere in this flow.
+   */
+  async function onRequestReview(sourceId: string, model: AiModel) {
+    const source = boxes[sourceId];
+    const code = extractCode(source?.output ?? "");
+    if (!code.trim()) return;
+
+    const size = getItemSize(source ?? { kind: "ai" });
+    const reviewPrompt = buildReviewPrompt(code);
+
+    const reviewId = addAiBlock({
+      x: Math.min((source?.x ?? 0) + size.width + 48, WORLD_WIDTH - AI_WIDTH),
+      y: source?.y ?? 0,
+      model,
+      prompt: reviewPrompt,
+    });
+    addConnection(sourceId, reviewId);
+    applySelection([reviewId]);
+    patchAi(reviewId, { status: "running", output: "", answeredBy: "" });
+
+    try {
+      const { text, answeredBy } = await requestAi(reviewPrompt, model);
+      patchAi(reviewId, { output: text, answeredBy, status: "idle" });
+      // Logged like any other successful run, so past reviews become
+      // workspace context for later prompts.
+      void logAiOutput({
+        workspaceId,
+        blockId: reviewId,
+        model,
+        prompt: reviewPrompt,
+        content: text,
+      }).then(() => {
+        setMemoryRefreshKey((key) => key + 1);
+      });
+    } catch (error) {
+      patchAi(reviewId, {
+        output: error instanceof Error ? error.message : "Review failed",
+        status: "error",
+      });
+    }
   }
 
   async function onCreateCompare(prompt: string, models: AiModel[]) {
@@ -1165,10 +1341,7 @@ export function Canvas() {
           <button
             type="button"
             className="nav-ghost"
-            onClick={() => {
-              clearServerSession();
-              window.location.reload();
-            }}
+            onClick={() => setSwitchConfirmOpen(true)}
           >
             Switch
           </button>
@@ -1200,13 +1373,6 @@ export function Canvas() {
           </button>
           <button
             type="button"
-            className={`nav-ghost${documentOpen ? " nav-ghost-active" : ""}`}
-            onClick={() => setDocumentOpen((open) => !open)}
-          >
-            Document
-          </button>
-          <button
-            type="button"
             className={`nav-ghost${docsOpen ? " nav-ghost-active" : ""}`}
             onClick={() => setDocsOpen((open) => !open)}
           >
@@ -1223,79 +1389,113 @@ export function Canvas() {
           </button>
           <button
             type="button"
-            className={`nav-run${traceOpen ? " nav-run-active" : ""}`}
+            className={`nav-ghost${traceOpen ? " nav-ghost-active" : ""}`}
             onClick={() => setTraceOpen((open) => !open)}
+            title="Workflow run history"
           >
-            Run
+            Runs
           </button>
         </div>
       </header>
 
       <div className="tool-dock" role="toolbar" aria-label="Canvas tools">
-        <DockButton
-          icon="bolt"
-          label="Trigger"
-          onClick={() => addWorkflowNode("trigger")}
-        />
+        {/* Primary: what this product is for. AI and documents first — the
+            whiteboard tools are one click away in the toolboxes below. */}
         <DockButton
           icon="psychology"
           label="AI Agent"
           onClick={() => addAiBlock()}
         />
-        <DockButton
-          icon="alt_route"
-          label="Condition"
-          onClick={() => addWorkflowNode("condition")}
-        />
-        <DockButton
-          icon="auto_fix_high"
-          label="Transform"
-          onClick={() => addWorkflowNode("transform")}
-        />
-        <DockButton
-          icon="output"
-          label="Output"
-          onClick={() => addWorkflowNode("output")}
-        />
+        <DockButton icon="description" label="Doc" onClick={() => addDoc()} />
         <DockButton icon="sticky_note_2" label="Note" onClick={() => addSticky()} />
-        <DockButton
-          icon="description"
-          label="Doc"
-          active={documentOpen}
-          onClick={() => setDocumentOpen((open) => !open)}
-        />
+
         <span className="dock-split" aria-hidden />
-        <DockButton icon="crop_square" label="Box" onClick={() => addBox()} />
-        <DockButton
-          icon="image"
-          label="Image"
-          onClick={() => fileInputRef.current?.click()}
-        />
-        <DockButton icon="title" label="Text" onClick={() => addText()} />
-        <DockButton
+
+        <Toolbox
+          id="workflow"
+          icon="bolt"
+          label="Workflow"
+          openId={openToolbox}
+          onOpenChange={setOpenToolbox}
+        >
+          <DockButton
+            icon="bolt"
+            label="Trigger"
+            onClick={() => addWorkflowNode("trigger")}
+          />
+          <DockButton
+            icon="alt_route"
+            label="Condition"
+            onClick={() => addWorkflowNode("condition")}
+          />
+          <DockButton
+            icon="auto_fix_high"
+            label="Transform"
+            onClick={() => addWorkflowNode("transform")}
+          />
+          <DockButton
+            icon="output"
+            label="Output"
+            onClick={() => addWorkflowNode("output")}
+          />
+        </Toolbox>
+
+        <Toolbox
+          id="shapes"
           icon="rectangle"
-          label="Rect"
-          onClick={() => addShape("rect")}
-        />
-        <DockButton
-          icon="circle"
-          label="Circle"
-          onClick={() => addShape("ellipse")}
-        />
-        <DockButton
+          label="Shapes"
+          openId={openToolbox}
+          onOpenChange={setOpenToolbox}
+        >
+          <DockButton
+            icon="rectangle"
+            label="Rect"
+            onClick={() => addShape("rect")}
+          />
+          <DockButton
+            icon="circle"
+            label="Circle"
+            onClick={() => addShape("ellipse")}
+          />
+          <DockButton icon="crop_square" label="Box" onClick={() => addBox()} />
+        </Toolbox>
+
+        <Toolbox
+          id="tools"
           icon="edit"
-          label="Pen"
-          active={tool === "pen"}
-          onClick={() => setTool((t) => (t === "pen" ? "select" : "pen"))}
-        />
-        <DockButton
-          icon="ink_eraser"
-          label="Eraser"
-          active={tool === "eraser"}
-          onClick={() =>
-            setTool((t) => (t === "eraser" ? "select" : "eraser"))
-          }
-        />
+          label="Tools"
+          openId={openToolbox}
+          onOpenChange={setOpenToolbox}
+          /* Pen and eraser are modes, not one-shot actions, so the trigger has
+             to keep showing that one is engaged after the toolbox closes. */
+          active={tool !== "select"}
+        >
+          <DockButton icon="title" label="Text" onClick={() => addText()} />
+          <DockButton
+            icon="image"
+            label="Image"
+            onClick={() => fileInputRef.current?.click()}
+          />
+          <DockButton
+            icon="description"
+            label="File"
+            onClick={() => anyFileInputRef.current?.click()}
+          />
+          <DockButton
+            icon="edit"
+            label="Pen"
+            active={tool === "pen"}
+            onClick={() => setTool((t) => (t === "pen" ? "select" : "pen"))}
+          />
+          <DockButton
+            icon="ink_eraser"
+            label="Eraser"
+            active={tool === "eraser"}
+            onClick={() =>
+              setTool((t) => (t === "eraser" ? "select" : "eraser"))
+            }
+          />
+        </Toolbox>
       </div>
 
       {tool === "pen" || tool === "eraser" ? (
@@ -1337,6 +1537,13 @@ export function Canvas() {
       ) : null}
 
       <input
+        ref={anyFileInputRef}
+        type="file"
+        hidden
+        onChange={(event) => void onPickFile(event)}
+      />
+
+      <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
@@ -1360,9 +1567,17 @@ export function Canvas() {
         />
       ) : null}
 
-      <DocumentPad
-        expanded={documentOpen}
-        onExpandedChange={setDocumentOpen}
+      <ConfirmDialog
+        open={switchConfirmOpen}
+        title="Leave this server?"
+        body={`You'll disconnect from server ${serverCode} and go back to the join screen. The canvas and its team memory stay safe — rejoin any time with the same code.`}
+        confirmLabel="Leave server"
+        destructive
+        onCancel={() => setSwitchConfirmOpen(false)}
+        onConfirm={() => {
+          clearServerSession();
+          window.location.reload();
+        }}
       />
 
       <TeamMemoryPanel
@@ -1385,19 +1600,17 @@ export function Canvas() {
         ref={canvasRef}
         className={`canvas${tool === "pen" || tool === "eraser" ? " canvas-pen" : ""}${tool === "eraser" ? " canvas-eraser" : ""}`}
         onPointerDown={onCanvasPointerDown}
+        onPointerMove={onCanvasPointerMove}
+        onPointerLeave={() => updateMyPresence({ cursor: null })}
       >
-        {entries.length === 0 ? (
-          <div className="empty-canvas">
-            <div className="empty-orb">
-              <LayoutGrid size={26} strokeWidth={1.5} aria-hidden />
-            </div>
-            <h2 className="empty-title">Start building</h2>
-            <p className="empty-copy">
-              Add your first block from the toolbar above to begin constructing
-              your AI thought-stream.
-            </p>
-          </div>
-        ) : null}
+        {/* The shared world: a fixed WORLD_WIDTH x WORLD_HEIGHT surface every
+            client renders into, so one coordinate means the same place on every
+            screen. Each viewer scrolls their own view of it. */}
+        <div
+          className="canvas-world"
+          style={{ width: WORLD_WIDTH, height: WORLD_HEIGHT }}
+        >
+        <Cursors />
 
         <ConnectionsLayer
           boxes={boxes}
@@ -1478,6 +1691,7 @@ export function Canvas() {
                   onOutputDown={(event) => onOutputDown(event, id)}
                   onInputUp={(event) => onInputUp(event, id)}
                   onPropagateOutput={(text) => feedConnectedPrompts(id, text)}
+                  onRequestReview={(model) => void onRequestReview(id, model)}
                   buildPrompt={(userPrompt) => buildPromptFor(id, userPrompt)}
                   onMemoryLogged={() =>
                     setMemoryRefreshKey((key) => key + 1)
@@ -1603,6 +1817,62 @@ export function Canvas() {
             );
           }
 
+          if (box.kind === "doc") {
+            const inRange = selectedIds.some(
+              (sid) =>
+                boxes[sid]?.kind === "ai" &&
+                nearbyByAi[sid]?.ids.includes(id),
+            );
+            return (
+              <div
+                key={id}
+                className={wrapClass(id, inRange ? " note-in-range" : "")}
+                style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+              >
+                <DocBlock
+                  id={id}
+                  box={box}
+                  dragging={draggingId === id}
+                  selected={isSelected(id)}
+                  expanded={expandedDocId === id}
+                  onExpandedChange={(open) =>
+                    setExpandedDocId(open ? id : null)
+                  }
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
+                  onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                  onResizeStart={(event) =>
+                    startResize(
+                      event,
+                      id,
+                      box.width ?? DOC_WIDTH,
+                      box.height ?? DOC_HEIGHT,
+                    )
+                  }
+                />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
+              </div>
+            );
+          }
+
+          if (box.kind === "file") {
+            return (
+              <div
+                key={id}
+                className={wrapClass(id)}
+                style={{ transform: `translate(${box.x}px, ${box.y}px)` }}
+              >
+                <FileBlock
+                  box={box}
+                  dragging={draggingId === id}
+                  selected={isSelected(id)}
+                  onSelect={(event) => selectItem(id, event.shiftKey)}
+                  onDragStart={(event) => startDrag(event, id, box.x, box.y)}
+                />
+                <CreatorBadge name={box.createdBy} creatorId={box.creatorId} />
+              </div>
+            );
+          }
+
           if (box.kind === "image") {
             return (
               <div
@@ -1686,7 +1956,27 @@ export function Canvas() {
           );
         })}
 
+        </div>
+
+      </div>
+
+      {/* Pinned chrome: siblings of .canvas, not children, so they stay put
+          while the world scrolls underneath. */}
+        {entries.length === 0 ? (
+          <div className="empty-canvas">
+            <div className="empty-orb">
+              <LayoutGrid size={26} strokeWidth={1.5} aria-hidden />
+            </div>
+            <h2 className="empty-title">Start building</h2>
+            <p className="empty-copy">
+              Add your first block from the toolbar above to begin constructing
+              your AI thought-stream.
+            </p>
+          </div>
+        ) : null}
+
         <div
+          ref={trashRef}
           className={`trash-bin${overTrash ? " trash-hot" : ""}`}
           aria-label="Trash — drag items here to delete"
           title="Drag items here to delete"
@@ -1694,7 +1984,6 @@ export function Canvas() {
           <Trash2 className="trash-icon" size={18} strokeWidth={1.7} aria-hidden />
           <span className="trash-label">Trash</span>
         </div>
-      </div>
     </div>
   );
 }
@@ -1720,6 +2009,80 @@ const DOCK_ICONS: Record<string, LucideIcon> = {
   edit: Pen,
   ink_eraser: Eraser,
 };
+
+/**
+ * A dock entry that expands to reveal related tools, so the main dock can
+ * foreground AI and documents instead of 14 flat buttons.
+ *
+ * Closes on outside click, on Escape, and after any contained tool is used —
+ * the last of those matters because most children create something on the
+ * canvas and the popover would otherwise sit over the result.
+ */
+function Toolbox({
+  id,
+  icon,
+  label,
+  openId,
+  onOpenChange,
+  active,
+  children,
+}: {
+  id: string;
+  icon: string;
+  label: string;
+  openId: string | null;
+  onOpenChange: (next: string | null) => void;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  const open = openId === id;
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!ref.current?.contains(event.target as Node)) onOpenChange(null);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onOpenChange(null);
+    }
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, onOpenChange]);
+
+  const Icon = DOCK_ICONS[icon] ?? Square;
+
+  return (
+    <div className="toolbox" ref={ref}>
+      <button
+        type="button"
+        className={`dock-btn toolbox-trigger${open || active ? " dock-btn-active" : ""}`}
+        title={label}
+        aria-expanded={open}
+        aria-haspopup="true"
+        onClick={() => onOpenChange(open ? null : id)}
+      >
+        <Icon className="dock-icon" size={19} strokeWidth={1.7} aria-hidden />
+        <span className="dock-label">{label}</span>
+        <ChevronDown className="toolbox-caret" size={11} strokeWidth={2.2} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          className="toolbox-panel"
+          role="group"
+          aria-label={label}
+          onClick={() => onOpenChange(null)}
+        >
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function DockButton({
   icon,

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ensureWorkspace } from "../backend/src/lib/ensureWorkspace.js";
 import * as orchestrator from "../backend/src/lib/orchestrator.js";
+import { createUploadTicket, MAX_FILE_BYTES } from "../backend/src/lib/fileStorage.js";
 import {
   liveblocksRoomId,
   normalizeJoinCode,
@@ -41,6 +42,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (body.action === "create" || body.action === "join") {
       await handleServerSession(body, res);
+      return;
+    }
+
+    // /api/files is rewritten here rather than given its own route: the project
+    // is already at Vercel Hobby's 12-function ceiling.
+    if (body.action === "upload-url") {
+      const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : "";
+      const fileName = typeof body.fileName === "string" ? body.fileName : "";
+      const size = typeof body.size === "number" ? body.size : 0;
+      if (!workspaceId || !fileName) {
+        res.status(400).json({ error: "workspaceId and fileName are required" });
+        return;
+      }
+      if (size > MAX_FILE_BYTES) {
+        res.status(413).json({
+          error: `File is too large (max ${Math.round(MAX_FILE_BYTES / 1024 / 1024)}MB)`,
+        });
+        return;
+      }
+      const ticket = await createUploadTicket({ workspaceId, fileName });
+      res.status(200).json(ticket);
       return;
     }
 

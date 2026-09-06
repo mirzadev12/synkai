@@ -106,7 +106,7 @@ export default function App() {
         <RoomProvider
           key={session.roomId}
           id={session.roomId}
-          initialPresence={{ name: "" }}
+          initialPresence={{ name: "", cursor: null }}
           initialStorage={{ boxes: new LiveMap() }}
         >
           <RoomContents />
