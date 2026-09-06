@@ -3054,3 +3054,68 @@ html.light .ai-model-claude {
   opacity: 1;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
+
+/* ── Missing-migration warning ────────────────────────────────────────────
+   Named as a setup problem, not an app error, and it says exactly which file
+   to run. */
+.schema-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 10px var(--space-4);
+  border-bottom: 1px solid var(--outline-variant);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+  color: var(--on-surface);
+  z-index: 11;
+}
+
+.schema-warning > svg {
+  color: var(--warning);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.schema-warning-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.schema-warning-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.schema-warning-copy {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--on-surface-variant);
+}
+
+.schema-warning-copy code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  background: var(--surface-container);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-xs);
+  padding: 0 4px;
+}
+
+.schema-warning-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--secondary);
+  cursor: pointer;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: var(--radius-xs);
+  flex-shrink: 0;
+}
+
+.schema-warning-close:hover {
+  color: var(--on-surface);
+  background: var(--surface-container);
+}

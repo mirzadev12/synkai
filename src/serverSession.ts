@@ -1,7 +1,14 @@
+export type MissingMigration = {
+  migration: string;
+  feature: string;
+};
+
 export type ServerSession = {
   code: string;
   workspaceId: string;
   roomId: string;
+  /** Migrations the database is missing — surfaced as a banner, not silently. */
+  missingMigrations?: MissingMigration[];
 };
 
 const STORAGE_KEY = "synkai-server-session";
@@ -23,6 +30,12 @@ export function loadServerSession(): ServerSession | null {
         code: parsed.code,
         workspaceId: parsed.workspaceId,
         roomId: parsed.roomId,
+        // Carried across reloads, otherwise the warning would appear once on
+        // join and never again — which is exactly when it would be missed.
+        // Re-checked against the server on the next join.
+        missingMigrations: Array.isArray(parsed.missingMigrations)
+          ? parsed.missingMigrations
+          : [],
       };
     }
     return null;
@@ -68,10 +81,23 @@ export async function requestServerSession(
       typeof record.error === "string" ? record.error : "Could not open server",
     );
   }
+  const missing = Array.isArray(record.missingMigrations)
+    ? record.missingMigrations.flatMap((row) => {
+        const r =
+          row && typeof row === "object" && !Array.isArray(row)
+            ? (row as Record<string, unknown>)
+            : {};
+        return typeof r.migration === "string"
+          ? [{ migration: r.migration, feature: String(r.feature ?? "") }]
+          : [];
+      })
+    : [];
+
   const session: ServerSession = {
     code: String(record.code ?? ""),
     workspaceId: String(record.workspaceId ?? ""),
     roomId: String(record.roomId ?? ""),
+    missingMigrations: missing,
   };
   if (!/^\d{6}$/.test(session.code) || !session.workspaceId || !session.roomId) {
     throw new Error("Invalid server response");

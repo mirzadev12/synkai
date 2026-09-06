@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ensureWorkspace } from "../backend/src/lib/ensureWorkspace.js";
 import * as orchestrator from "../backend/src/lib/orchestrator.js";
 import { createUploadTicket, MAX_FILE_BYTES } from "../backend/src/lib/fileStorage.js";
+import { missingMigrations } from "../backend/src/lib/schemaCheck.js";
 import {
   liveblocksRoomId,
   normalizeJoinCode,
@@ -25,7 +26,10 @@ async function handleServerSession(
   const workspaceId = workspaceIdFromCode(code);
   const roomId = liveblocksRoomId(code);
   await ensureWorkspace(workspaceId, `Server ${code}`);
-  res.status(200).json({ code, workspaceId, roomId });
+  // Reported at join so an unapplied migration surfaces as a visible warning
+  // instead of a feature that silently does nothing.
+  const missing = await missingMigrations().catch(() => []);
+  res.status(200).json({ code, workspaceId, roomId, missingMigrations: missing });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

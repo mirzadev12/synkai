@@ -262,7 +262,16 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
           const workspaceId = workspaceIdFromCode(code);
           const roomId = liveblocksRoomId(code);
           await ensureWorkspace(workspaceId, `Server ${code}`);
-          sendJson(res, 200, { code, workspaceId, roomId });
+          const { missingMigrations } = await import(
+            "./backend/src/lib/schemaCheck.ts"
+          );
+          const missing = await missingMigrations().catch(() => []);
+          sendJson(res, 200, {
+            code,
+            workspaceId,
+            roomId,
+            missingMigrations: missing,
+          });
         })().catch(next);
       });
 

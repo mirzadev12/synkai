@@ -52,6 +52,7 @@ import { CreatorBadge } from "./CreatorBadge";
 import { ImageItem } from "./ImageItem";
 import { NameGate } from "./NameGate";
 import { PresenceBar } from "./PresenceBar";
+import { SchemaWarning } from "./SchemaWarning";
 import { clearServerSession } from "./serverSession";
 import { useWorkspace } from "./WorkspaceContext";
 import { requestAi } from "./runAiClient";
@@ -1406,6 +1407,8 @@ export function Canvas() {
           </button>
         </div>
       </header>
+
+      <SchemaWarning />
 
       <div className="tool-dock" role="toolbar" aria-label="Canvas tools">
         {/* Primary: what this product is for. AI and documents first — the
