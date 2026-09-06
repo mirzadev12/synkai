@@ -1,6 +1,6 @@
 import { useMutation } from "@liveblocks/react/suspense";
 import { memo, useEffect, useRef, useState } from "react";
-import { ChevronRight, Gem, Link2, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
+import { ChevronRight, Link2, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
 import { AiOutput } from "./AiOutput";
 import { hasCode } from "./codeBlocks";
 import {
@@ -143,17 +143,16 @@ export async function logAiOutput(args: {
 
 function ModelIcon({ model }: { model: AiModel }) {
   if (model === "groq") return <Zap size={15} strokeWidth={1.8} aria-hidden />;
-  if (model === "claude") return <Gem size={15} strokeWidth={1.8} aria-hidden />;
   return <Sparkles size={15} strokeWidth={1.8} aria-hidden />;
 }
 
 /** Any live model can review any other's code — reviewing with a different
- *  model than generated it is the point. */
-const REVIEW_MODELS: AiModel[] = ["gemini", "groq", "claude"];
+ *  model than generated it is the point. Claude is excluded: it has no free
+ *  tier through OpenRouter, so offering it would only ever produce a 500. */
+const REVIEW_MODELS: AiModel[] = ["gemini", "groq"];
 
 function modelLabel(model: AiModel) {
   if (model === "groq") return "Groq";
-  if (model === "claude") return "Claude";
   return "Gemini";
 }
 
@@ -178,7 +177,7 @@ function AiBlockInner({
 }: AiBlockProps) {
   const { workspaceId } = useWorkspace();
   const model: AiModel =
-    box.model === "groq" ? "groq" : box.model === "claude" ? "claude" : "gemini";
+    box.model === "groq" ? "groq" : "gemini";
   const prompt = box.prompt ?? "";
   const output = box.output ?? "";
   const answeredBy = box.answeredBy ?? "";
@@ -323,7 +322,6 @@ function AiBlockInner({
         >
           <option value="gemini">Gemini</option>
           <option value="groq">Groq</option>
-          <option value="claude">Claude</option>
           <option value="midjourney">Midjourney</option>
         </select>
         <button

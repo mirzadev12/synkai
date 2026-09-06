@@ -35,10 +35,12 @@ server/runAi.ts          Shared Gemini/Groq/Claude(OpenRouter) HTTP calls, used 
 backend/                 Standalone Express app (port 3001) for orchestration/memory —
                           separate from the Vercel API, NOT what the deployed canvas uses
                           for its /api/run path
-supabase/migrations/     Postgres schema, run in order 001 → 005
+supabase/migrations/     Postgres schema, run in order 001 → 006
 ```
 
-`vercel.json` rewrites `/api/rooms` → `/api/orchestrate` and everything else (non-`/api`) → `index.html`.
+`vercel.json` rewrites `/api/rooms` and `/api/files` → `/api/orchestrate`, and everything
+else (non-`/api`) → `index.html`. Both are folded in because the project sits at exactly
+12 serverless functions, Vercel Hobby's ceiling — a 13th route breaks the deploy.
 
 ## Running locally
 
@@ -63,31 +65,38 @@ edits auto-restart the server (Vite watches its own config file, not everything 
 ## Env vars (names only — see `.env.example` / `backend/.env.example`)
 
 Root `.env.local`: `VITE_LIVEBLOCKS_PUBLIC_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`,
-`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (powers the AI Block's Claude option),
-`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY` (optional — only needed if Claude is
+re-enabled in the UI), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 `backend/.env`: `PORT`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`,
 `GEMINI_MODEL` (optional), `ANTHROPIC_API_KEY`, `DEMO_WORKSPACE_ID`.
 Both `.env` files are gitignored; only the `.example` files are tracked.
 
-**`OPENROUTER_API_KEY` still needs to be added to Vercel's project env vars** — the
-integration is implemented (see checklist) but no key has been generated/added yet, so
-the deployed Claude option will 500 with "OPENROUTER_API_KEY is missing" until it's set.
+No missing keys: every feature in the deployed app runs on free tiers (Gemini, Groq,
+Liveblocks, Supabase, Vercel Hobby). `OPENROUTER_API_KEY` is unset by design — see the
+AI Blocks note on Claude.
+
+**Deploys come from `master`, not `main`.** Pushing to `main` deploys nothing. Also,
+production cannot be verified with `curl`: Vercel serves a bot "Security Checkpoint" to
+non-browser clients, so a scripted poll will never see the app. Check it in a browser.
 
 ## Canvas item model
 
 Everything on the canvas is a `LiveObject<BoxData>` in one `LiveMap` (`storage.boxes`),
 typed in `src/liveblocks.config.ts`. `kind` discriminates: `ai`, `sticky`, `image`,
-`shape`, `text`, `stroke` (pen), `connection`, plus workflow nodes `trigger` /
-`condition` / `transform` / `output`. Multi-select, group-drag, marquee select, and
+`shape`, `text`, `doc`, `file`, `stroke` (pen), `connection`, plus workflow nodes
+`trigger` / `condition` / `transform` / `output`. Multi-select, group-drag, marquee select, and
 trash-bin delete (drag onto the corner bin, or Delete/Backspace) all operate over this
 same map in `src/Canvas.tsx`.
 
 ## AI Blocks
 
-- `AiModel` (`src/liveblocks.config.ts`) is `"gemini" | "groq" | "claude"`. Midjourney
-  is the only remaining dropdown option that's UI-only and triggers a "coming soon"
-  popup (`src/AiBlock.tsx`, `src/ComparePanel.tsx`) — it never reaches the type system
-  or the API, since it's image generation and there's no equivalent text endpoint yet.
+- `AiModel` (`src/liveblocks.config.ts`) is `"gemini" | "groq" | "claude"`, but
+  **only Gemini and Groq are selectable**. Claude is implemented server-side via
+  OpenRouter and works, but OpenRouter has no free tier for Anthropic models
+  (~$2/$10 per million tokens for Sonnet), so offering it without a paid key
+  only produced 500s. It stays in the type because old blocks may have it
+  stored; `AiBlock` falls those back to Gemini. Midjourney remains a UI-only
+  "coming soon" option.
 - Nearby context: `Canvas.tsx`'s `nearbyByAi` scans sticky notes and text boxes within
   `CONTEXT_RANGE` px and prepends their text to the prompt (`buildPromptFor`). Memoized
   off a cheap positional key so unrelated drags elsewhere on the canvas don't force a
@@ -103,7 +112,7 @@ same map in `src/Canvas.tsx`.
   (fan-out to multiple targets from one source works — verified against real
   `LiveMap`/`LiveObject` instances) — each target still requires a manual Send/Run,
   there is no auto-chaining.
-- Compare mode: `ComparePanel.tsx` fires one prompt at any 2+ of Gemini/Groq/Claude
+- Compare mode: `ComparePanel.tsx` fires one prompt at both of Gemini/Groq
   simultaneously via `addCompareBlocks`, laying out one AI Block per model;
   `DisagreementPanel.tsx` then surfaces where the answers diverge.
 
@@ -210,7 +219,7 @@ stale rows.
 | Name-entry popup as modal on load | working | `role="dialog" aria-modal="true"` |
 | Team Memory panel actually accessible | working | Header button toggles it |
 | Live presence count | working | `PresenceBar.tsx`, Liveblocks presence API |
-| Claude activated via OpenRouter (replacing "coming soon") | working (needs key) | Implemented in `server/runAi.ts` + `api/run.ts` + `vite.config.ts` dev middleware; **`OPENROUTER_API_KEY` still needs to be added to Vercel** (and to `.env.local` for local use) — not invented here |
+| Claude via OpenRouter | implemented, **not offered** | Works server-side, but OpenRouter has no free tier for Anthropic models, so the UI option only ever produced a 500. Removed from the dropdown, Compare and the review menu; re-enable by setting `OPENROUTER_API_KEY` and restoring the three UI call sites |
 
 ## Visual design pass
 

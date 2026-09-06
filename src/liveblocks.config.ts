@@ -1,6 +1,17 @@
 // Types for Liveblocks Storage. This file is only TypeScript types — no runtime code.
 import type { LiveMap, LiveObject } from "@liveblocks/client";
 
+/**
+ * "claude" is deliberately still in this union even though the UI no longer
+ * offers it: blocks created earlier may have it saved in Liveblocks storage,
+ * and server/runAi.ts still implements it via OpenRouter. It is not selectable
+ * because Claude has no free tier through OpenRouter — offering it without a
+ * paid key only ever produced a 500. AiBlock falls stored "claude" back to
+ * Gemini so those old blocks still run.
+ *
+ * To re-enable: set OPENROUTER_API_KEY, then restore the <option> in
+ * AiBlock.tsx, the checkbox in ComparePanel.tsx, and "claude" in REVIEW_MODELS.
+ */
 export type AiModel = "gemini" | "groq" | "claude";
 
 export type ItemKind =

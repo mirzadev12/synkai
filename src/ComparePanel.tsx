@@ -13,7 +13,6 @@ export function ComparePanel({ open, onClose, onCreate }: ComparePanelProps) {
   const [prompt, setPrompt] = useState("");
   const [gemini, setGemini] = useState(true);
   const [groq, setGroq] = useState(true);
-  const [claude, setClaude] = useState(false);
   const [comingSoon, setComingSoon] = useState<Record<string, boolean>>({
     midjourney: false,
   });
@@ -24,7 +23,6 @@ export function ComparePanel({ open, onClose, onCreate }: ComparePanelProps) {
     const models: AiModel[] = [];
     if (gemini) models.push("gemini");
     if (groq) models.push("groq");
-    if (claude) models.push("claude");
     if (models.length < 2) return;
     onCreate(prompt.trim() || "Compare this idea", models);
     onClose();
@@ -65,14 +63,6 @@ export function ComparePanel({ open, onClose, onCreate }: ComparePanelProps) {
           />
           Groq
         </label>
-        <label className="compare-check">
-          <input
-            type="checkbox"
-            checked={claude}
-            onChange={(event) => setClaude(event.target.checked)}
-          />
-          Claude
-        </label>
         {COMING_SOON.map((name) => (
           <label key={name} className="compare-check compare-soon">
             <input
@@ -91,7 +81,7 @@ export function ComparePanel({ open, onClose, onCreate }: ComparePanelProps) {
         <button
           type="button"
           className="ai-run"
-          disabled={(gemini ? 1 : 0) + (groq ? 1 : 0) + (claude ? 1 : 0) < 2}
+          disabled={(gemini ? 1 : 0) + (groq ? 1 : 0) < 2}
           onClick={submit}
         >
           Create & run
