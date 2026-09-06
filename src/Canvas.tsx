@@ -35,6 +35,7 @@ import { TriggerBlock } from "./TriggerBlock";
 import {
   boundsOfPoints,
   eraseNearPoints,
+  isConnectableKind,
   parseStrokePoints,
   type Point,
 } from "./canvasGeometry";
@@ -96,7 +97,7 @@ const PEN_COLORS = ["#1c1917", "#dc2626", "#2563eb"] as const;
 const PEN_WIDTHS = [2, 4, 8] as const;
 const ERASER_RADIUS = 18;
 
-type Tool = "select" | "pen" | "eraser";
+type Tool = "select" | "pen" | "eraser" | "connect";
 
 export function Canvas() {
   const { code: serverCode, workspaceId } = useWorkspace();
@@ -139,6 +140,8 @@ export function Canvas() {
   const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
   // Which dock toolbox is open; only one at a time.
   const [openToolbox, setOpenToolbox] = useState<string | null>(null);
+  // Connect tool: the block a link is being drawn FROM, if any.
+  const [connectFromId, setConnectFromId] = useState<string | null>(null);
   const [switchConfirmOpen, setSwitchConfirmOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memoryRefreshKey, setMemoryRefreshKey] = useState(0);
@@ -825,6 +828,12 @@ export function Canvas() {
       ) {
         return;
       }
+      if (event.key === "Escape" && tool === "connect") {
+        event.preventDefault();
+        if (connectFromId) setConnectFromId(null);
+        else setTool("select");
+        return;
+      }
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       if (selectedConnectionId) {
         event.preventDefault();
@@ -840,7 +849,7 @@ export function Canvas() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedConnectionId, selectedIds, deleteItems]);
+  }, [selectedConnectionId, selectedIds, deleteItems, tool, connectFromId]);
 
   // `boxes` is a fresh reference on every storage mutation — including every
   // pointer-move frame of every drag, of any item kind. Key the nearby-context
@@ -931,7 +940,35 @@ export function Canvas() {
     setSelectedIds(ids);
   }
 
+  /**
+   * Click-to-connect.
+   *
+   * Dragging port-to-port still works and is unchanged; this is a discoverable
+   * alternative, since the ports are 12px targets most people never find. It
+   * produces the same `connection` objects through the same addConnection, so
+   * handoff behaviour is untouched.
+   */
+  function handleConnectClick(id: string) {
+    const kind = boxes[id]?.kind;
+    if (!isConnectableKind(kind)) return;
+    if (!connectFromId) {
+      setConnectFromId(id);
+      return;
+    }
+    if (connectFromId === id) {
+      setConnectFromId(null);
+      return;
+    }
+    addConnection(connectFromId, id, "default");
+    // Chain onward from the block just linked, so A→B→C is three clicks.
+    setConnectFromId(id);
+  }
+
   function selectItem(id: string, shiftKey: boolean) {
+    if (tool === "connect") {
+      handleConnectClick(id);
+      return;
+    }
     setSelectedConnectionId(null);
     const prev = selectedIdsRef.current;
     if (shiftKey) {
@@ -948,7 +985,13 @@ export function Canvas() {
   }
 
   function wrapClass(id: string, extra = "") {
-    return `item-wrap${isSelected(id) ? " item-selected" : ""}${extra}`;
+    const connecting =
+      tool === "connect" && isConnectableKind(boxes[id]?.kind)
+        ? connectFromId === id
+          ? " link-source"
+          : " link-target"
+        : "";
+    return `item-wrap${isSelected(id) ? " item-selected" : ""}${connecting}${extra}`;
   }
 
   function startDrag(
@@ -957,7 +1000,7 @@ export function Canvas() {
     x: number,
     y: number,
   ) {
-    if (tool === "pen" || tool === "eraser") return;
+    if (tool === "pen" || tool === "eraser" || tool === "connect") return;
     event.preventDefault();
     event.stopPropagation();
     const point = canvasPoint(event);
@@ -1420,6 +1463,15 @@ export function Canvas() {
         />
         <DockButton icon="description" label="Doc" onClick={() => addDoc()} />
         <DockButton icon="sticky_note_2" label="Note" onClick={() => addSticky()} />
+        <DockButton
+          icon="alt_route"
+          label="Connect"
+          active={tool === "connect"}
+          onClick={() => {
+            setConnectFromId(null);
+            setTool((t) => (t === "connect" ? "select" : "connect"));
+          }}
+        />
 
         <span className="dock-split" aria-hidden />
 
@@ -1509,6 +1561,26 @@ export function Canvas() {
           />
         </Toolbox>
       </div>
+
+      {tool === "connect" ? (
+        <div className="pen-bar">
+          <span>
+            {connectFromId
+              ? "Now click the block to connect it to"
+              : "Click a block to start a connection"}
+          </span>
+          <button
+            type="button"
+            className="nav-ghost"
+            onClick={() => {
+              setConnectFromId(null);
+              setTool("select");
+            }}
+          >
+            Done
+          </button>
+        </div>
+      ) : null}
 
       {tool === "pen" || tool === "eraser" ? (
         <div className="pen-bar">

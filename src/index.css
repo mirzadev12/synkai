@@ -3119,3 +3119,24 @@ html.light .ai-model-claude {
   color: var(--on-surface);
   background: var(--surface-container);
 }
+
+/* ── Connect tool ─────────────────────────────────────────────────────────
+   Ports are 12px targets most people never discover; this makes linking a
+   visible mode. Same connections, same handoff behaviour. */
+.canvas-world .link-target {
+  cursor: crosshair;
+}
+
+.canvas-world .link-target > .canvas-item,
+.canvas-world .link-target > .ai-block,
+.canvas-world .link-target > .wf-block {
+  outline: 1px dashed var(--outline);
+  outline-offset: 3px;
+}
+
+.canvas-world .link-source > .canvas-item,
+.canvas-world .link-source > .ai-block,
+.canvas-world .link-source > .wf-block {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
