@@ -1,5 +1,11 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { runAi, type AiModel } from "../server/runAi.js";
+import {
+  AI_RUN_LIMIT,
+  MAX_PROMPT_CHARS,
+  clientKey,
+  rateLimit,
+} from "../server/rateLimit.js";
 
 function isAiModel(value: unknown): value is AiModel {
   return value === "gemini" || value === "groq" || value === "claude";
@@ -14,12 +20,29 @@ export default async function handler(
     return;
   }
 
+  // Whoever holds a join code can spend this workspace's model quota, so the
+  // model endpoints are budgeted per client.
+  const limit = rateLimit(
+    clientKey(req.headers as Record<string, unknown>, "run"),
+    AI_RUN_LIMIT.limit,
+    AI_RUN_LIMIT.windowMs,
+  );
+  if (!limit.allowed) {
+    res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+    res.status(429).json({ error: "Too many requests — slow down a moment." });
+    return;
+  }
+
   try {
     const body =
       req.body && typeof req.body === "object" && !Array.isArray(req.body)
         ? (req.body as Record<string, unknown>)
         : {};
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
+    if (prompt.length > MAX_PROMPT_CHARS) {
+      res.status(413).json({ error: "Prompt is too long" });
+      return;
+    }
     const model = body.model;
     if (!isAiModel(model)) {
       res.status(400).json({ error: "model must be gemini, groq, or claude" });

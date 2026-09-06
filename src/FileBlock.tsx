@@ -1,5 +1,6 @@
 import { Download, File, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { FILE_HEIGHT, FILE_WIDTH, type BoxData } from "./liveblocks.config";
+import { safeLinkUrl } from "./safeUrl";
 
 type FileBlockProps = {
   box: BoxData;
@@ -34,9 +35,11 @@ export function FileBlock({
   onDragStart,
 }: FileBlockProps) {
   const name = box.fileName ?? "File";
-  const url = box.src ?? "";
+  // The URL arrives through shared storage, so it is checked before it becomes
+  // an href — see safeUrl.
+  const url = safeLinkUrl(box.src);
   // No URL yet means the upload is still in flight on whoever added it.
-  const uploading = !url;
+  const uploading = !box.src;
 
   return (
     <div

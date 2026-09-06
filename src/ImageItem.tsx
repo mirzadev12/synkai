@@ -1,5 +1,6 @@
 import { useMutation } from "@liveblocks/react/suspense";
 import type { BoxData } from "./liveblocks.config";
+import { safeImageUrl } from "./safeUrl";
 
 type ImageItemProps = {
   id: string;
@@ -18,7 +19,8 @@ export function ImageItem({
 }: ImageItemProps) {
   const width = box.width ?? 220;
   const height = box.height ?? 160;
-  const src = box.src ?? "";
+  // Shared-storage value, so it is checked before it becomes an img src.
+  const src = safeImageUrl(box.src);
 
   const update = useMutation(
     ({ storage }, patch: Partial<Pick<BoxData, "src">>) => {

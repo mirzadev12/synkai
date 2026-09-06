@@ -3,6 +3,16 @@ import react from "@vitejs/plugin-react";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
 import { runAi, type AiModel } from "./server/runAi.ts";
+import {
+  AI_RUN_LIMIT,
+  MAX_MEMORY_CHARS,
+  MAX_PROMPT_CHARS,
+  MEMORY_WRITE_LIMIT,
+  ROOM_LIMIT,
+  UPLOAD_LIMIT,
+  clientKey,
+  rateLimit,
+} from "./server/rateLimit.ts";
 
 function isAiModel(value: unknown): value is AiModel {
   return value === "gemini" || value === "groq" || value === "claude";
@@ -22,6 +32,11 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
   res.end(JSON.stringify(body));
+}
+
+function sendTooManyRequests(res: ServerResponse, retryAfterSeconds: number) {
+  res.setHeader("Retry-After", String(retryAfterSeconds));
+  sendJson(res, 429, { error: "Too many requests — slow down a moment." });
 }
 
 function applyServerEnv(env: Record<string, string>) {
@@ -68,6 +83,19 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
             return;
           }
 
+          const limit = rateLimit(
+            clientKey(req.headers as Record<string, unknown>, "run"),
+            AI_RUN_LIMIT.limit,
+            AI_RUN_LIMIT.windowMs,
+          );
+          if (!limit.allowed) {
+            res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+            sendJson(res, 429, {
+              error: "Too many requests — slow down a moment.",
+            });
+            return;
+          }
+
           try {
             const body = await readJsonBody(req);
             const record =
@@ -75,6 +103,10 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
                 ? (body as Record<string, unknown>)
                 : {};
             const prompt = typeof record.prompt === "string" ? record.prompt : "";
+            if (prompt.length > MAX_PROMPT_CHARS) {
+              sendJson(res, 413, { error: "Prompt is too long" });
+              return;
+            }
             const model = record.model;
             if (!isAiModel(model)) {
               sendJson(res, 400, {
@@ -102,7 +134,10 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
 
         void (async () => {
           const parsed = parseMemoryPath(url.split("#")[0] ?? url);
-          if (!parsed) {
+          const { isWorkspaceId } = await import(
+            "./backend/src/lib/roomIdentity.ts"
+          );
+          if (!parsed || !isWorkspaceId(parsed.workspaceId)) {
             sendJson(res, 400, { error: "workspaceId required" });
             return;
           }
@@ -145,6 +180,15 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
           }
 
           if (req.method === "POST") {
+            const limit = rateLimit(
+              clientKey(req.headers, "memory"),
+              MEMORY_WRITE_LIMIT.limit,
+              MEMORY_WRITE_LIMIT.windowMs,
+            );
+            if (!limit.allowed) {
+              sendTooManyRequests(res, limit.retryAfterSeconds);
+              return;
+            }
             const body = await readJsonBody(req);
             const record =
               body && typeof body === "object" && !Array.isArray(body)
@@ -154,6 +198,10 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
               typeof record.content === "string" ? record.content : "";
             if (!content.trim()) {
               sendJson(res, 400, { error: "content required" });
+              return;
+            }
+            if (content.length > MAX_MEMORY_CHARS) {
+              sendJson(res, 413, { error: "Memory entry is too long" });
               return;
             }
             const eventType =
@@ -206,16 +254,32 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
             body && typeof body === "object" && !Array.isArray(body)
               ? (body as Record<string, unknown>)
               : {};
-          const { createUploadTicket, MAX_FILE_BYTES } = await import(
-            "./backend/src/lib/fileStorage.ts"
+          const { createUploadTicket, MAX_FILE_BYTES, uploadRejectionReason } =
+            await import("./backend/src/lib/fileStorage.ts");
+          const { isWorkspaceId } = await import(
+            "./backend/src/lib/roomIdentity.ts"
           );
           const workspaceId =
             typeof record.workspaceId === "string" ? record.workspaceId : "";
           const fileName =
             typeof record.fileName === "string" ? record.fileName : "";
           const size = typeof record.size === "number" ? record.size : 0;
-          if (!workspaceId || !fileName) {
+          if (!isWorkspaceId(workspaceId) || !fileName) {
             sendJson(res, 400, { error: "workspaceId and fileName are required" });
+            return;
+          }
+          const uploadLimit = rateLimit(
+            clientKey(req.headers, "files"),
+            UPLOAD_LIMIT.limit,
+            UPLOAD_LIMIT.windowMs,
+          );
+          if (!uploadLimit.allowed) {
+            sendTooManyRequests(res, uploadLimit.retryAfterSeconds);
+            return;
+          }
+          const rejection = uploadRejectionReason(fileName);
+          if (rejection) {
+            sendJson(res, 400, { error: rejection });
             return;
           }
           if (size > MAX_FILE_BYTES) {
@@ -232,6 +296,15 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
         void (async () => {
           if (req.method !== "POST") {
             sendJson(res, 405, { error: "Method not allowed" });
+            return;
+          }
+          const roomLimit = rateLimit(
+            clientKey(req.headers, "rooms"),
+            ROOM_LIMIT.limit,
+            ROOM_LIMIT.windowMs,
+          );
+          if (!roomLimit.allowed) {
+            sendTooManyRequests(res, roomLimit.retryAfterSeconds);
             return;
           }
           const body = await readJsonBody(req);
@@ -256,7 +329,7 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
                 )
               : randomJoinCode();
           if (!code) {
-            sendJson(res, 400, { error: "Enter a 6-digit server code" });
+            sendJson(res, 400, { error: "That join code isn't valid" });
             return;
           }
           const workspaceId = workspaceIdFromCode(code);
@@ -283,6 +356,15 @@ function aiApiPlugin(env: Record<string, string>): Plugin {
         }
 
         void (async () => {
+          const limit = rateLimit(
+            clientKey(req.headers, "workflows"),
+            AI_RUN_LIMIT.limit,
+            AI_RUN_LIMIT.windowMs,
+          );
+          if (!limit.allowed) {
+            sendTooManyRequests(res, limit.retryAfterSeconds);
+            return;
+          }
           const { dispatchWorkflowApi } = await import(
             "./backend/src/lib/workflowHttp.ts"
           );

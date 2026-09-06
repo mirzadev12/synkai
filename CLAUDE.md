@@ -13,7 +13,7 @@ consistently across every user-facing screen (see Feature checklist).
 
 - Frontend: Vite 8 + React 19 + TypeScript, no router (single canvas view).
 - Realtime/state: Liveblocks (`@liveblocks/client`, `@liveblocks/react`) — one Liveblocks
-  room per 6-digit "server" code; canvas contents are one `LiveMap<string, LiveObject<BoxData>>`.
+  room per join-code "server"; canvas contents are one `LiveMap<string, LiveObject<BoxData>>`.
 - AI providers: Gemini (`@google/generative-ai` REST), Groq (OpenAI-compatible REST),
   Claude via OpenRouter (OpenAI-compatible REST) — all called server-side, never from
   the browser.
@@ -28,9 +28,10 @@ consistently across every user-facing screen (see Feature checklist).
 src/                     React canvas app (Liveblocks room = one "server")
 api/run.ts               Vercel serverless — canvas AI Block Gemini/Groq/Claude calls
 api/memory/[workspaceId].ts   GET/POST team memory events (Supabase)
-api/orchestrate.ts       Also serves /api/rooms (create/join 6-digit server codes) —
+api/orchestrate.ts       Also serves /api/rooms (create/join server codes) and /api/files —
                           folded in to stay under Vercel Hobby's serverless function count
-api/agents*, api/workflows*   Multi-agent orchestration + saved workflow graphs
+api/workflows*           Saved workflow graphs (api/agents* and api/generate-stories
+                          were deleted — see Security)
 server/runAi.ts          Shared Gemini/Groq/Claude(OpenRouter) HTTP calls, used by api/run.ts
 backend/                 Standalone Express app (port 3001) for orchestration/memory —
                           separate from the Vercel API, NOT what the deployed canvas uses
@@ -167,6 +168,34 @@ memories get dropped; raise toward 0.70 if noise creeps in.
 
 **Free-tier ceilings**: Supabase 500MB (~100k embedded rows at 768 dims) and **projects
 pause after 7 days of inactivity** — that pause, not storage, is what will bite first.
+
+## Security
+
+The threat model is small and worth stating plainly: **the join code is the only
+access control.** Anyone holding a code can read and write that canvas, spend the
+workspace's model quota, and read its team memory. There are no user accounts,
+and adding them is not on the roadmap. Everything below hardens *around* that,
+it does not replace it.
+
+| Measure | Where | Note |
+|---|---|---|
+| 10-char join codes (Crockford base32) | `backend/src/lib/roomIdentity.ts` | 32^10 ≈ 1.1e15 vs 1e6 for the old 6-digit codes, which were brute-forceable in minutes. Legacy 6-digit codes still work forever — `workspaceIdFromCode` hashes the code, so rejecting them would strand every existing canvas |
+| Rate limits on every API route | `server/rateLimit.ts` | Fixed window, in-memory. **A cost guard, not a security boundary** — it is per-instance on serverless and `x-forwarded-for` is spoofable. It stops one client draining the free Gemini/Groq quota, which is the realistic abuse |
+| Prompt / memory size caps | `server/rateLimit.ts` | `MAX_PROMPT_CHARS` 24k, `MAX_MEMORY_CHARS` 40k |
+| Workspace ids validated as UUIDs | `isWorkspaceId` in `roomIdentity.ts` | Every id this app mints is a UUID v5 from the code. Checked on `/api/memory/*`, `/api/files`, `/api/workflows` — a workspace id is also the storage path prefix, so an unchecked one lets a caller scatter objects across the bucket |
+| Upload extension denylist | `uploadRejectionReason` in `fileStorage.ts` | The bucket is **public**, so an `.html` or `.svg` upload would become a live page on the Supabase origin — a free phishing host. Blocks active-content and executable extensions |
+| URLs from shared storage checked before render | `src/safeUrl.ts` | Canvas item URLs are written by whoever else is in the room; `javascript:` in an `href` runs on click, in this origin. `data:image/*` still allowed for legacy images |
+| Security headers | `vercel.json` | `nosniff`, HSTS, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cache-Control: no-store` on `/api/*` |
+| Narrow CSP | `vercel.json` | `frame-ancestors`, `base-uri`, `object-src`, `form-action` only. `script-src`/`connect-src` are **deliberately omitted**: `index.html` has an inline theme script and the app opens a Liveblocks websocket plus Supabase Storage requests, so a wrong origin list would break the site for every visitor |
+| Dead public model endpoints deleted | — | `api/generate-stories.ts`, `api/agents.ts`, `api/agents/[workspaceId].ts` and the agent-chain branch of `api/orchestrate.ts` were reachable on the public URL, spent Gemini quota, and were called by **nothing** in the canvas. The Express app under `backend/` still exposes them on localhost. Also frees 3 of Vercel Hobby's 12 function slots |
+
+**Known and accepted:**
+- The storage bucket is public. Making it private would break every file URL already
+  saved on a canvas, so it needs a migration, not a flag flip.
+- API 500s return the underlying error message. That leaks table names on a schema
+  error — which is exactly what made the unapplied-migration bugs findable.
+- Prism's `innerHTML` in `AiOutput.tsx` is safe: `Prism.highlight` escapes its input,
+  and it falls back to `textContent` when there is no grammar.
 
 ## Known gaps / not implemented
 

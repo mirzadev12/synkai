@@ -1,3 +1,12 @@
+/**
+ * Both code formats are valid: 10-char alphanumeric for new rooms, and 6-digit
+ * for every room created before codes were lengthened. Rejecting the legacy
+ * form here would lock people out of their existing canvases.
+ */
+export function isJoinCode(code: string): boolean {
+  return /^[0-9A-HJKMNP-TV-Z]{10}$/.test(code) || /^\d{6}$/.test(code);
+}
+
 export type MissingMigration = {
   migration: string;
   feature: string;
@@ -20,7 +29,7 @@ export function loadServerSession(): ServerSession | null {
     const parsed = JSON.parse(raw) as Partial<ServerSession>;
     if (
       typeof parsed.code === "string" &&
-      /^\d{6}$/.test(parsed.code) &&
+      isJoinCode(parsed.code) &&
       typeof parsed.workspaceId === "string" &&
       parsed.workspaceId.length > 10 &&
       typeof parsed.roomId === "string" &&
@@ -99,7 +108,7 @@ export async function requestServerSession(
     roomId: String(record.roomId ?? ""),
     missingMigrations: missing,
   };
-  if (!/^\d{6}$/.test(session.code) || !session.workspaceId || !session.roomId) {
+  if (!isJoinCode(session.code) || !session.workspaceId || !session.roomId) {
     throw new Error("Invalid server response");
   }
   saveServerSession(session);

@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase.js";
+import { isWorkspaceId } from "./roomIdentity.js";
 
 export const FILES_BUCKET = "canvas-files";
 
@@ -42,6 +43,36 @@ function safeName(name: string): string {
   return cleaned || "file";
 }
 
+/**
+ * Extensions refused because the bucket is public: anything the browser will
+ * execute or render as a document gets a live, shareable URL on the Supabase
+ * origin, which turns the uploader into a free host for phishing pages and
+ * stored scripts. Blocking them at ticket time is cheaper than making the
+ * bucket private, which would break every file URL already on a canvas.
+ */
+const BLOCKED_EXTENSIONS = new Set([
+  "html", "htm", "xhtml", "shtml", "svg", "xml", "xsl",
+  "js", "mjs", "cjs", "jsx", "wasm",
+  "exe", "dll", "msi", "bat", "cmd", "com", "scr", "ps1",
+  "sh", "jar", "app", "apk", "deb", "dmg", "pkg",
+  "php", "phtml", "asp", "aspx", "jsp", "cgi", "py", "rb",
+]);
+
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
+}
+
+export function uploadRejectionReason(fileName: string): string | null {
+  const trimmed = fileName.trim();
+  if (!trimmed) return "File name is required";
+  if (trimmed.length > 200) return "File name is too long";
+  if (BLOCKED_EXTENSIONS.has(extensionOf(trimmed))) {
+    return "That file type can't be uploaded here";
+  }
+  return null;
+}
+
 export type UploadTicket = {
   path: string;
   signedUrl: string;
@@ -60,6 +91,14 @@ export async function createUploadTicket(args: {
   workspaceId: string;
   fileName: string;
 }): Promise<UploadTicket> {
+  if (!isWorkspaceId(args.workspaceId)) {
+    // The workspace id is the storage path prefix, so an unchecked one lets a
+    // caller scatter objects anywhere in the bucket.
+    throw new Error("Invalid workspaceId");
+  }
+  const rejection = uploadRejectionReason(args.fileName);
+  if (rejection) throw new Error(rejection);
+
   await ensureBucket();
   const supabase = getSupabase();
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  isJoinCode,
   requestServerSession,
   type ServerSession,
 } from "./serverSession";
@@ -48,7 +49,7 @@ export function ServerGate({ onReady }: ServerGateProps) {
         <p className="brand-wordmark setup-brand">Synk AI</p>
         <h2 className="name-gate-title">Servers</h2>
         <p className="name-gate-copy">
-          Each 6-digit code is its own canvas and team memory. Create one, or
+          Each code is its own canvas and team memory. Create one, or
           join a friend’s.
         </p>
         {error ? <p className="team-memory-error">{error}</p> : null}
@@ -81,13 +82,20 @@ export function ServerGate({ onReady }: ServerGateProps) {
             <input
               className="name-input name-gate-input"
               autoFocus
-              inputMode="numeric"
               autoComplete="off"
-              maxLength={6}
-              placeholder="6-digit code"
+              maxLength={12}
+              placeholder="Join code"
               value={code}
               onChange={(event) =>
-                setCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                // Accepts both formats: 10-char alphanumeric for new rooms and
+                // 6-digit for legacy ones. Stripping non-digits here (as it
+                // used to) would make a new code impossible to type.
+                setCode(
+                  event.target.value
+                    .toUpperCase()
+                    .replace(/[^0-9A-Z]/g, "")
+                    .slice(0, 10),
+                )
               }
             />
             <div className="server-gate-actions">
@@ -105,7 +113,7 @@ export function ServerGate({ onReady }: ServerGateProps) {
               <button
                 type="submit"
                 className="nav-run"
-                disabled={busy || code.length !== 6}
+                disabled={busy || !isJoinCode(code)}
               >
                 {busy ? "Joining…" : "Join"}
               </button>

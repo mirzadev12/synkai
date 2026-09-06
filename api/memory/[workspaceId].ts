@@ -4,11 +4,18 @@ import {
   embedAndStoreEvent,
   retrieveRelevantMemory,
 } from "../../server/memoryRetrieval.js";
+import { isWorkspaceId } from "../../backend/src/lib/roomIdentity.js";
+import {
+  MAX_MEMORY_CHARS,
+  MEMORY_WRITE_LIMIT,
+  clientKey,
+  rateLimit,
+} from "../../server/rateLimit.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const workspaceId = req.query.workspaceId;
   const id = Array.isArray(workspaceId) ? workspaceId[0] : workspaceId;
-  if (!id || typeof id !== "string") {
+  if (!isWorkspaceId(id)) {
     res.status(400).json({ error: "workspaceId required" });
     return;
   }
@@ -57,9 +64,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         req.body && typeof req.body === "object" && !Array.isArray(req.body)
           ? (req.body as Record<string, unknown>)
           : {};
+      // Each write costs a row plus an embedding call, so it is budgeted.
+      const limit = rateLimit(
+        clientKey(req.headers as Record<string, unknown>, "memory"),
+        MEMORY_WRITE_LIMIT.limit,
+        MEMORY_WRITE_LIMIT.windowMs,
+      );
+      if (!limit.allowed) {
+        res.setHeader("Retry-After", String(limit.retryAfterSeconds));
+        res.status(429).json({ error: "Too many requests — slow down a moment." });
+        return;
+      }
+
       const content = typeof body.content === "string" ? body.content : "";
       if (!content.trim()) {
         res.status(400).json({ error: "content required" });
+        return;
+      }
+      if (content.length > MAX_MEMORY_CHARS) {
+        res.status(413).json({ error: "Memory entry is too long" });
         return;
       }
       const eventType =
