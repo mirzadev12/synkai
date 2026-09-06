@@ -1135,17 +1135,26 @@ export function Canvas() {
     }
   }
 
-  function onPickImage(event: React.ChangeEvent<HTMLInputElement>) {
+  /**
+   * Images upload to Supabase Storage and store a URL.
+   *
+   * They used to be read as base64 data URLs and written straight into the
+   * Liveblocks document, so a single photo could add megabytes to the shared
+   * doc — synced to every peer, forever. Existing data-URL images keep working
+   * because `src` is just a URL either way.
+   */
+  async function onPickImage(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        addImageFromSrc(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
     event.target.value = "";
+    if (!file) return;
+    const id = addImageFromSrc("");
+    try {
+      const { url } = await uploadFile(workspaceId, file);
+      setFileUrl(id, url);
+    } catch (error) {
+      deleteItems([id]);
+      window.alert(error instanceof Error ? error.message : "Upload failed");
+    }
   }
 
   function onOutputDown(
@@ -1548,7 +1557,7 @@ export function Canvas() {
         type="file"
         accept="image/*"
         hidden
-        onChange={onPickImage}
+        onChange={(event) => void onPickImage(event)}
       />
 
       <ComparePanel

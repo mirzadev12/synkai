@@ -802,10 +802,10 @@ a:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px;
+  gap: var(--space-2);
+  padding: 10px;
   border: 1px solid var(--outline-variant);
-  border-radius: 4px;
+  border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: none;
   color: var(--on-surface);
@@ -815,12 +815,17 @@ a:focus-visible {
 
 .item-handle {
   cursor: grab;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: var(--weight-regular);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--secondary);
   user-select: none;
+}
+
+.item-handle:active {
+  cursor: grabbing;
 }
 
 .box-dragging .item-handle {
@@ -917,6 +922,7 @@ a:focus-visible {
 
 .shape-item {
   background: var(--surface);
+  border-radius: var(--radius-md);
 }
 
 .shape-body {
@@ -931,6 +937,7 @@ a:focus-visible {
 
 .text-item {
   background: var(--surface);
+  border-radius: var(--radius-md);
 }
 
 .stroke-wrap {
@@ -2041,21 +2048,25 @@ html.light .ai-model-claude {
 
 .trash-bin {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
-  width: 56px;
-  height: 56px;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: 52px;
+  height: 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  border-radius: 12px;
-  border: 1px dashed var(--outline-variant);
+  gap: 3px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--outline);
   background: var(--surface);
-  color: var(--on-surface-variant);
+  color: var(--secondary);
   pointer-events: none;
   z-index: 5;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
 }
 
 .trash-bin.trash-hot {
@@ -2071,9 +2082,10 @@ html.light .ai-model-claude {
 }
 
 .trash-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  font-weight: var(--weight-regular);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -2998,4 +3010,47 @@ html.light .ai-model-claude {
   .file-block-spin {
     animation: none;
   }
+}
+
+/* ── Handed-over context ──────────────────────────────────────────────────
+   Upstream output is stored inside the prompt as <<<SRC:…>>> markers. It used
+   to render raw in the composer; it shows here as chips instead. */
+.linked-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 12px 6px;
+}
+
+.linked-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 7px;
+  font-size: 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.linked-chip-remove {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: var(--radius-full);
+  opacity: 0.65;
+}
+
+.linked-chip-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }

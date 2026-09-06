@@ -1,8 +1,14 @@
 import { useMutation } from "@liveblocks/react/suspense";
 import { memo, useEffect, useRef, useState } from "react";
-import { ChevronRight, Gem, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
+import { ChevronRight, Gem, Link2, ShieldCheck, Sparkles, X, Zap } from "lucide-react";
 import { AiOutput } from "./AiOutput";
 import { hasCode } from "./codeBlocks";
+import {
+  linkedSources,
+  removeLinkedContext,
+  replaceUserText,
+  userTextOf,
+} from "./linkedContext";
 import {
   AI_HEIGHT,
   AI_WIDTH,
@@ -151,14 +157,6 @@ function modelLabel(model: AiModel) {
   return "Gemini";
 }
 
-/** Visual-only: hide connector-injected source blocks from the user bubble. */
-function visibleUserMessage(prompt: string): string {
-  const stripped = prompt
-    .replace(/<<<SRC:[^>]+>>>[\s\S]*?<<<END:[^>]+>>>/g, "")
-    .trim();
-  return stripped;
-}
-
 export const AiBlock = memo(AiBlockInner);
 
 function AiBlockInner({
@@ -192,7 +190,8 @@ function AiBlockInner({
   const messagesRef = useRef<HTMLDivElement>(null);
   const [comingSoon, setComingSoon] = useState<string | null>(null);
   const [modelSelectKey, setModelSelectKey] = useState(0);
-  const userMessage = visibleUserMessage(prompt);
+  const userMessage = userTextOf(prompt);
+  const sources = linkedSources(prompt);
 
   const updateAi = useMutation(
     (
@@ -466,6 +465,31 @@ function AiBlockInner({
         ) : null}
       </div>
 
+      {/* Context handed over from upstream blocks. Shown as removable chips
+          rather than raw markers in the composer. */}
+      {sources.length > 0 ? (
+        <div className="linked-sources">
+          {sources.map((source) => (
+            <span key={source.fromId} className="linked-chip">
+              <Link2 size={11} strokeWidth={1.9} aria-hidden />
+              {source.label}
+              <button
+                type="button"
+                className="linked-chip-remove"
+                aria-label={`Remove context from ${source.label}`}
+                title="Detach this context"
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() =>
+                  updateAi({ prompt: removeLinkedContext(prompt, source.fromId) })
+                }
+              >
+                <X size={10} strokeWidth={2.2} aria-hidden />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+
       <form
         className="ai-chat-composer"
         onSubmit={(event) => {
@@ -477,8 +501,13 @@ function AiBlockInner({
           className="ai-prompt"
           rows={1}
           placeholder={`Message ${modelLabel(model)}…`}
-          value={prompt}
-          onChange={(event) => updateAi({ prompt: event.target.value })}
+          /* Only the user's own words. Connector-injected source blocks are
+             stored in `prompt` as <<<SRC:…>>> markers and used to leak into
+             this field verbatim; they now surface as chips above instead. */
+          value={userMessage}
+          onChange={(event) =>
+            updateAi({ prompt: replaceUserText(prompt, event.target.value) })
+          }
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
