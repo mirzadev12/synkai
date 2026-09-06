@@ -193,8 +193,55 @@ html.light {
   min-width: 40px;
 }
 
-.theme-toggle .material-symbols-outlined {
-  font-size: 20px;
+/* Panels mount rather than toggle a class, so this animates the entrance only —
+   which is the half you actually perceive. Kept short and eased-out so it reads
+   as responsive rather than decorative. */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.team-memory-panel,
+.docs-panel,
+.compare-panel,
+.disagreement-panel,
+.workflow-trace-panel {
+  animation: panel-in var(--duration-normal) var(--ease-out) both;
+}
+
+.compare-overlay {
+  animation: overlay-in var(--duration-fast) var(--ease-out) both;
+}
+
+/* Anyone who has asked the OS for less motion gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  .team-memory-panel,
+  .docs-panel,
+  .compare-panel,
+  .disagreement-panel,
+  .workflow-trace-panel,
+  .compare-overlay {
+    animation: none;
+  }
+
+  .memory-used-caret {
+    transition: none;
+  }
 }
 
 html,
@@ -271,17 +318,6 @@ a:focus-visible {
 
 .setup-brand {
   margin: 0 0 12px;
-}
-
-.material-symbols-outlined {
-  font-family: "Material Symbols Outlined";
-  font-weight: 300;
-  font-style: normal;
-  font-size: 22px;
-  line-height: 1;
-  letter-spacing: normal;
-  display: inline-block;
-  font-variation-settings: "FILL" 0, "wght" 300, "GRAD" 0, "opsz" 24;
 }
 
 .toolbar {
@@ -546,11 +582,6 @@ a:focus-visible {
   border: 1px solid var(--outline-variant);
   background: var(--surface-container);
   color: var(--on-surface-variant);
-}
-
-.empty-orb .material-symbols-outlined {
-  font-size: 36px;
-  font-variation-settings: "wght" 200, "opsz" 24;
 }
 
 .empty-title {
@@ -903,12 +934,84 @@ a:focus-visible {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: var(--primary-container);
-  color: var(--on-maroon);
+  background: var(--model-soft, var(--accent-soft));
+  color: var(--model-tint, var(--accent));
+  border: 1px solid var(--model-line, var(--outline-variant));
 }
 
-.ai-agent-avatar .material-symbols-outlined {
-  font-size: 18px;
+/* ── Per-model tint ──────────────────────────────────────────────────────
+   Each model gets its own muted hue so you can tell blocks apart at a glance
+   on a busy canvas, without any block competing with the teal UI accent.
+   Three well-separated earthy hues; deliberately no blue or purple. Set on
+   the block, consumed by the avatar and the status rail. */
+.ai-model-gemini {
+  --model-tint: #8a6d1f;
+  --model-soft: color-mix(in srgb, #8a6d1f 12%, transparent);
+  --model-line: color-mix(in srgb, #8a6d1f 34%, transparent);
+}
+
+.ai-model-groq {
+  --model-tint: #a8451a;
+  --model-soft: color-mix(in srgb, #a8451a 12%, transparent);
+  --model-line: color-mix(in srgb, #a8451a 34%, transparent);
+}
+
+.ai-model-claude {
+  --model-tint: #4a6b2f;
+  --model-soft: color-mix(in srgb, #4a6b2f 12%, transparent);
+  --model-line: color-mix(in srgb, #4a6b2f 34%, transparent);
+}
+
+/* Lifted for contrast on the dark ground. */
+:root .ai-model-gemini {
+  --model-tint: #e0b95f;
+  --model-soft: color-mix(in srgb, #e0b95f 14%, transparent);
+  --model-line: color-mix(in srgb, #e0b95f 30%, transparent);
+}
+
+:root .ai-model-groq {
+  --model-tint: #f58559;
+  --model-soft: color-mix(in srgb, #f58559 14%, transparent);
+  --model-line: color-mix(in srgb, #f58559 30%, transparent);
+}
+
+:root .ai-model-claude {
+  --model-tint: #a3c76d;
+  --model-soft: color-mix(in srgb, #a3c76d 14%, transparent);
+  --model-line: color-mix(in srgb, #a3c76d 30%, transparent);
+}
+
+html.light .ai-model-gemini {
+  --model-tint: #8a6d1f;
+  --model-soft: color-mix(in srgb, #8a6d1f 12%, transparent);
+  --model-line: color-mix(in srgb, #8a6d1f 34%, transparent);
+}
+
+html.light .ai-model-groq {
+  --model-tint: #a8451a;
+  --model-soft: color-mix(in srgb, #a8451a 12%, transparent);
+  --model-line: color-mix(in srgb, #a8451a 34%, transparent);
+}
+
+html.light .ai-model-claude {
+  --model-tint: #4a6b2f;
+  --model-soft: color-mix(in srgb, #4a6b2f 12%, transparent);
+  --model-line: color-mix(in srgb, #4a6b2f 34%, transparent);
+}
+
+/* A thin tinted rail down the block's leading edge — the "which model is this"
+   cue that survives even when the header scrolls out of view. */
+.ai-block.ai-chat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--model-tint, var(--accent));
+  opacity: 0.65;
+  pointer-events: none;
 }
 
 .ai-agent-meta {
@@ -1054,12 +1157,20 @@ a:focus-visible {
   border-bottom-right-radius: 4px;
 }
 
+/* Model output is monospace — it should read as engineering output, visually
+   distinct from the sans UI chrome around it. The user's own message stays
+   sans, so the two sides of the conversation are told apart by more than
+   alignment and colour. */
 .ai-bubble-ai {
   align-self: flex-start;
   background: var(--surface-container);
   color: var(--on-surface);
   border: 0;
   border-bottom-left-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: 0;
 }
 
 .ai-bubble-pending {
@@ -1199,6 +1310,18 @@ a:focus-visible {
   padding: 6px 8px;
 }
 
+/* The composer is where you write the prompt — same monospace as the output. */
+.ai-prompt {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.ai-prompt::placeholder {
+  font-family: var(--font-mono);
+  color: var(--secondary);
+}
+
 .ai-prompt:focus,
 .ai-model:focus {
   outline: none;
@@ -1284,14 +1407,14 @@ a:focus-visible {
   color: var(--primary);
 }
 
-.memory-used-glyph {
-  color: var(--primary);
-  font-size: 9px;
+.memory-used-caret {
+  opacity: 0.75;
+  flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
-.memory-used-caret {
-  font-size: 8px;
-  opacity: 0.7;
+.memory-used-caret.is-open {
+  transform: rotate(90deg);
 }
 
 .memory-used-list {
@@ -1954,10 +2077,6 @@ a:focus-visible {
   padding: 8px 12px;
   cursor: pointer;
   box-shadow: var(--shadow-md);
-}
-
-.notes-chip .material-symbols-outlined {
-  font-size: 18px;
 }
 
 .notes-window {

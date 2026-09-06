@@ -1,5 +1,26 @@
 import { LiveObject } from "@liveblocks/client";
 import {
+  ArrowRightFromLine,
+  Brain,
+  Circle,
+  Eraser,
+  FileText,
+  GitBranch,
+  // Aliased: these collide with this app's own StickyNote component and with
+  // the global Image constructor.
+  Image as ImageIcon,
+  LayoutGrid,
+  Pen,
+  RectangleHorizontal,
+  Square,
+  StickyNote as StickyNoteIcon,
+  Trash2,
+  Type,
+  WandSparkles,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+import {
   useMutation,
   useStorage,
 } from "@liveblocks/react/suspense";
@@ -1368,9 +1389,7 @@ export function Canvas() {
         {entries.length === 0 ? (
           <div className="empty-canvas">
             <div className="empty-orb">
-              <span className="material-symbols-outlined" aria-hidden>
-                dashboard_customize
-              </span>
+              <LayoutGrid size={26} strokeWidth={1.5} aria-hidden />
             </div>
             <h2 className="empty-title">Start building</h2>
             <p className="empty-copy">
@@ -1672,13 +1691,35 @@ export function Canvas() {
           aria-label="Trash — drag items here to delete"
           title="Drag items here to delete"
         >
-          <span className="trash-icon">⌫</span>
+          <Trash2 className="trash-icon" size={18} strokeWidth={1.7} aria-hidden />
           <span className="trash-label">Trash</span>
         </div>
       </div>
     </div>
   );
 }
+
+/**
+ * Material Symbols ligature name → lucide icon. Keeping the original string
+ * keys means none of the DockButton call sites had to change when the icon set
+ * was swapped.
+ */
+const DOCK_ICONS: Record<string, LucideIcon> = {
+  bolt: Zap,
+  psychology: Brain,
+  alt_route: GitBranch,
+  auto_fix_high: WandSparkles,
+  output: ArrowRightFromLine,
+  sticky_note_2: StickyNoteIcon,
+  description: FileText,
+  crop_square: Square,
+  image: ImageIcon,
+  title: Type,
+  rectangle: RectangleHorizontal,
+  circle: Circle,
+  edit: Pen,
+  ink_eraser: Eraser,
+};
 
 function DockButton({
   icon,
@@ -1691,6 +1732,7 @@ function DockButton({
   onClick: () => void;
   active?: boolean;
 }) {
+  const Icon = DOCK_ICONS[icon] ?? Square;
   return (
     <button
       type="button"
@@ -1698,9 +1740,7 @@ function DockButton({
       title={label}
       onClick={onClick}
     >
-      <span className="material-symbols-outlined" aria-hidden>
-        {icon}
-      </span>
+      <Icon className="dock-icon" size={19} strokeWidth={1.7} aria-hidden />
       <span className="dock-label">{label}</span>
     </button>
   );

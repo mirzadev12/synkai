@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Moon, Sun } from "lucide-react";
 
 export const THEME_STORAGE_KEY = "synk-ai-theme";
 
@@ -46,9 +47,11 @@ export function ThemeToggle() {
       aria-label={`Switch to ${next} theme`}
       onClick={() => setTheme(next)}
     >
-      <span className="material-symbols-outlined" aria-hidden>
-        {theme === "dark" ? "light_mode" : "dark_mode"}
-      </span>
+      {theme === "dark" ? (
+        <Sun size={17} strokeWidth={1.7} aria-hidden />
+      ) : (
+        <Moon size={17} strokeWidth={1.7} aria-hidden />
+      )}
     </button>
   );
 }

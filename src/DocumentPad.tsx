@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { FileText } from "lucide-react";
 import { useWorkspace } from "./WorkspaceContext";
 
 function documentKey(code: string) {
@@ -43,9 +44,7 @@ export function DocumentPad({ expanded, onExpandedChange }: DocumentPadProps) {
         onClick={() => onExpandedChange(true)}
         title="Open document"
       >
-        <span className="material-symbols-outlined" aria-hidden>
-          description
-        </span>
+        <FileText size={16} strokeWidth={1.7} aria-hidden />
         Document
       </button>
     );

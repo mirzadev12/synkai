@@ -1,5 +1,6 @@
 import { useMutation } from "@liveblocks/react/suspense";
 import { memo, useEffect, useRef, useState } from "react";
+import { ChevronRight, Gem, Sparkles, X, Zap } from "lucide-react";
 import {
   AI_HEIGHT,
   AI_WIDTH,
@@ -130,10 +131,10 @@ async function logAiOutput(args: {
   }
 }
 
-function modelIcon(model: AiModel) {
-  if (model === "groq") return "bolt";
-  if (model === "claude") return "diamond";
-  return "auto_awesome";
+function ModelIcon({ model }: { model: AiModel }) {
+  if (model === "groq") return <Zap size={15} strokeWidth={1.8} aria-hidden />;
+  if (model === "claude") return <Gem size={15} strokeWidth={1.8} aria-hidden />;
+  return <Sparkles size={15} strokeWidth={1.8} aria-hidden />;
 }
 
 function modelLabel(model: AiModel) {
@@ -260,7 +261,7 @@ function AiBlockInner({
 
   return (
     <div
-      className={`box ai-block ai-chat${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
+      className={`box ai-block ai-chat ai-model-${model}${dragging ? " box-dragging" : ""}${selected ? " item-selected" : ""}`}
       style={{ width, height }}
       onPointerDown={(event) => onSelect(event)}
     >
@@ -283,7 +284,7 @@ function AiBlockInner({
       <div className="ai-chat-header">
         <div className="ai-chat-header-drag" onPointerDown={onDragStart}>
           <span className="ai-agent-avatar" aria-hidden>
-            <span className="material-symbols-outlined">{modelIcon(model)}</span>
+            <ModelIcon model={model} />
           </span>
           <div className="ai-agent-meta">
             <strong className="ai-agent-name">Agent</strong>
@@ -331,9 +332,7 @@ function AiBlockInner({
             onClose();
           }}
         >
-          <span className="material-symbols-outlined" aria-hidden>
-            close
-          </span>
+          <X size={15} strokeWidth={1.8} aria-hidden />
         </button>
       </div>
 
@@ -346,12 +345,10 @@ function AiBlockInner({
         </div>
         {!userMessage && !output && !running ? (
           <div className="ai-chat-empty">
-            <p className="ai-chat-empty-title">
-              How can I help you today?
-            </p>
+            <p className="ai-chat-empty-title">Ask {modelLabel(model)} something</p>
             <p>
-              I’m your {modelLabel(model)} agent on this canvas. Type below —
-              nearby notes and team memory ride along.
+              Nearby notes come along automatically, and the most relevant
+              memories from this workspace are pulled in for you.
             </p>
           </div>
         ) : null}
@@ -382,14 +379,14 @@ function AiBlockInner({
               onPointerDown={(event) => event.stopPropagation()}
               onClick={() => setMemoriesOpen((open) => !open)}
             >
-              <span className="memory-used-glyph" aria-hidden>
-                ◈
-              </span>
+              <ChevronRight
+                className={`memory-used-caret${memoriesOpen ? " is-open" : ""}`}
+                size={11}
+                strokeWidth={2.2}
+                aria-hidden
+              />
               used {usedMemories.length}{" "}
               {usedMemories.length === 1 ? "memory" : "memories"}
-              <span className="memory-used-caret" aria-hidden>
-                {memoriesOpen ? "▾" : "▸"}
-              </span>
             </button>
             {memoriesOpen ? (
               <ul className="memory-used-list">

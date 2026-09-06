@@ -75,7 +75,9 @@ function RoomContents() {
   }
 
   return (
-    <ClientSideSuspense fallback={<div className="loading">Connecting…</div>}>
+    <ClientSideSuspense
+      fallback={<div className="loading">Opening the shared canvas…</div>}
+    >
       <Canvas />
     </ClientSideSuspense>
   );
